@@ -10,7 +10,4 @@ wheels/
 .venv
 
 # Dataset (large files, download separately)
-dataset/raw/
-*.jpg
-*.png
-*.bin
+dataset/
