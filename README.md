@@ -1,10 +1,10 @@
 # ReceiptGuard-ML
 
-A PyTorch-based receipt information extraction system using LayoutLM and the SROIE2019 dataset.
+A PyTorch-based receipt information extraction system using LayoutLM and the SROIE2019 dataset with centralized configuration management.
 
 ## Overview
 
-ReceiptGuard-ML is a machine learning system that extracts key information from scanned receipts using Microsoft's LayoutLM model. The system processes receipt images to identify and extract company names, dates, addresses, and total amounts through named entity recognition (NER).
+ReceiptGuard-ML is a machine learning system that extracts key information from scanned receipts using Microsoft's LayoutLM model. The system processes receipt images to identify and extract company names, dates, addresses, and total amounts through named entity recognition (NER) with built-in fraud detection capabilities.
 
 ## Features
 
@@ -12,6 +12,9 @@ ReceiptGuard-ML is a machine learning system that extracts key information from 
 - **Fraud Detection**: Fingerprint-based deduplication engine to detect duplicate receipt submissions
 - **LayoutLM Integration**: Leverages pre-trained LayoutLM for document understanding with spatial awareness
 - **SROIE2019 Dataset**: Built on the benchmark receipt OCR dataset
+- **Centralized Configuration**: YAML-based configuration system with CLI override support
+- **CLI Interface**: Complete command-line interface for preprocessing, training, and evaluation
+- **Kaggle Support**: Runtime configuration overrides for notebook environments
 - **Comprehensive Preprocessing**: Robust data pipeline with bbox normalization and BIO labeling
 - **PyTorch Dataset**: Ready-to-use dataset class with proper tensor handling
 - **Error Handling**: Graceful handling of malformed data and missing files
@@ -19,6 +22,18 @@ ReceiptGuard-ML is a machine learning system that extracts key information from 
 ## Current Implementation Status
 
 ✅ **Completed Modules:**
+- **Configuration System**
+  - Centralized YAML configuration (`config.yaml`)
+  - Global CFG object with attribute access
+  - CLI override support for runtime customization
+  - Kaggle notebook compatibility with `override_config()`
+  
+- **CLI Interface**
+  - Complete command-line entry point (`main.py`)
+  - Subcommands: preprocess, train, evaluate, full
+  - Argument validation and help documentation
+  - Error handling and progress reporting
+
 - **Data Layer**
   - Data preprocessing pipeline (`src/data/preprocessing.py`)
   - PyTorch dataset wrapper (`src/data/dataset.py`)
@@ -36,9 +51,17 @@ ReceiptGuard-ML is a machine learning system that extracts key information from 
   - Checkpoint save/load utilities
   - TensorBoard logging and training curve visualization
 
-🚧 **In Progress:**
-- End-to-end training pipelines
-- Inference pipeline for new receipts
+- **Pipeline Layer**
+  - End-to-end preprocessing pipeline (`src/pipelines/preprocessing_pipeline.py`)
+  - Model training pipeline (`src/pipelines/model_training_pipeline.py`)
+  - Evaluation pipeline (`src/pipelines/evaluation_pipeline.py`)
+  - Progress tracking and artifact management
+
+- **Inference Layer**
+  - Receipt predictor (`src/inference/predictor.py`)
+  - OCR integration with pytesseract
+  - Batch inference support
+  - Duplicate detection integration
 
 ## Installation
 
@@ -80,40 +103,124 @@ dataset/raw/SROIE2019/
 
 ## Usage
 
-### Data Preprocessing
+### Command Line Interface
+
+The main entry point is `main.py` which provides a complete CLI for all operations:
+
+```bash
+# Full pipeline (preprocess → train → evaluate)
+python main.py full
+
+# Individual operations
+python main.py preprocess --raw_path /path/to/data --processed_path /path/to/output
+python main.py train --num_epochs 10 --batch_size 4 --learning_rate 3e-5
+python main.py evaluate --checkpoint_path artifacts/checkpoints/best_model.pt
+
+# Get help
+python main.py --help
+python main.py train --help
+```
+
+### Configuration System
+
+All settings are managed through `config.yaml`:
+
+```yaml
+# Key configuration sections
+project:
+  name: "ReceiptGuard-ML"
+  version: "1.0.0"
+
+paths:
+  artifacts_dir: "artifacts"
+  checkpoints_dir: "artifacts/checkpoints"
+  evaluation_dir: "artifacts/evaluation"
+  logs_dir: "artifacts/logs"
+  ledger_path: "artifacts/ledger.json"
+
+training:
+  num_epochs: 10
+  batch_size: 8
+  learning_rate: 5e-5
+  weight_decay: 0.01
+  warmup_ratio: 0.1
+
+model:
+  model_path: "dataset/raw/SROIE2019/layoutlm-base-uncased"
+  num_labels: 9
+  dropout: 0.1
+
+# ... and more
+```
+
+#### Runtime Configuration Override
+
+```python
+from src.config import CFG, override_config
+
+# Override values at runtime (useful for Kaggle notebooks)
+override_config({
+    'training.batch_size': 16,
+    'training.num_epochs': 15,
+    'paths.raw_data_dir': '/kaggle/input/sroie2019'
+})
+
+# Access configuration
+print(f"Batch size: {CFG.training.batch_size}")
+print(f"Model path: {CFG.model.model_path}")
+```
+
+#### Path Helper
+
+```python
+from src.config import get_path
+
+# Get absolute paths with automatic directory creation
+artifacts_path = get_path('paths.artifacts_dir')
+checkpoints_path = get_path('paths.checkpoints_dir')
+
+# Paths are absolute and directories are created automatically
+print(artifacts_path)  # /home/user/projects/ReceiptGuard-ML/artifacts
+```
+
+### Programmatic Usage
+
+#### Data Preprocessing
 
 ```python
 from src.data.preprocessing import build_processed_sample
+from src.config import CFG
 
 # Process a single receipt
 sample = build_processed_sample(
     receipt_id="X51005433494",
     split="train", 
-    base_path="dataset/raw/SROIE2019"
+    base_path=CFG.paths.raw_data_path
 )
 
 print(sample)
 # Output: {'id': 'X51005433494', 'tokens': [...], 'bboxes': [...], 'labels': [...], 'entity_values': {...}}
 ```
 
-### PyTorch Dataset
+#### PyTorch Dataset
 
 ```python
 from src.data.dataset import ReceiptDataset
+from src.config import CFG
 from torch.utils.data import DataLoader
 
-# Create dataset
+# Create dataset using configuration
 dataset = ReceiptDataset(
-    data_path="dataset/raw/SROIE2019",
+    data_path=CFG.data.raw_data_path,
     split="train",
-    max_length=512
+    max_length=CFG.data.max_length
 )
 
 # Create data loader
 dataloader = DataLoader(
     dataset, 
-    batch_size=8, 
-    collate_fn=dataset.collate_fn,
+    batch_size=CFG.training.batch_size, 
+    collate_fn=collate_fn,
     shuffle=True
 )
 
@@ -126,158 +233,88 @@ for batch in dataloader:
     break
 ```
 
-### Fraud Detection (Deduplication)
-
-```python
-from src.data.dataloader import ReceiptLedger, build_receipt_fingerprint
-
-# Create ledger
-ledger = ReceiptLedger("dataset/processed/ledger.json")
-
-# Check and register a receipt
-entity_dict = {
-    'company': 'RESTORAN WAN SHENG',
-    'date': '06/05/2018',
-    'total': '2.40',
-    'address': 'NO.2, JALAN TEMENGGUNG 19/9, SEKSYEN 9, BANDAR MAHKOTA CHERAS'
-}
-
-result = ledger.check_and_register("receipt_001", entity_dict)
-
-if result['is_duplicate']:
-    print(f"Duplicate detected! Original receipt: {result['existing_record']['receipt_id']}")
-else:
-    print("New receipt registered")
-
-# Get fraud report
-fraud_report = ledger.get_fraud_report()
-print(f"Found {len(fraud_report)} duplicate groups")
-
-# Save ledger
-ledger.save()
-```
-
-### Model Training
+#### Model Training
 
 ```python
 from src.model.model import build_model, ModelConfig
 from src.model.train import Trainer, get_device
-from src.data.dataset import ReceiptDataset, collate_fn
+from src.config import CFG
 from torch.utils.data import DataLoader
 
-# Configuration
+# Configuration from CFG
 config = ModelConfig(
-    model_path="microsoft/layoutlm-base-uncased",
-    num_labels=9,
-    dropout=0.1,
-    learning_rate=5e-5,
-    weight_decay=0.01,
-    warmup_steps=500,
-    max_length=512,
+    model_path=CFG.model.model_path,
+    num_labels=CFG.model.num_labels,
+    dropout=CFG.model.dropout,
+    learning_rate=CFG.training.learning_rate,
+    weight_decay=CFG.training.weight_decay,
+    warmup_steps=CFG.training.warmup_steps,
+    max_length=CFG.data.max_length,
 )
 
 # Build model
 device = get_device()
 model = build_model(config)
 
-# Create data loaders
-train_dataset = ReceiptDataset("dataset/raw/SROIE2019", "train", max_length=512)
-val_dataset = ReceiptDataset("dataset/raw/SROIE2019", "test", max_length=512)
+# Train using pipeline
+from src.pipelines.model_training_pipeline import run_training_pipeline, TrainingConfig
 
-train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True, collate_fn=collate_fn)
-val_loader = DataLoader(val_dataset, batch_size=8, collate_fn=collate_fn)
+training_config = TrainingConfig()
+summary = run_training_pipeline(training_config)
 
-# Train
-output_dir = "outputs/run_001"
-trainer = Trainer(model, train_loader, val_loader, config, device, output_dir)
-trainer.train(num_epochs=10)
-
-# Training artifacts:
-# - outputs/run_001/best_model.pt
-# - outputs/run_001/final_model.pt
-# - outputs/run_001/training_log.json
-# - outputs/run_001/training_curves.png
-# - outputs/run_001/runs/ (TensorBoard logs)
+print(f"Training completed: {summary['status']}")
+print(f"Best checkpoint: {summary['best_checkpoint']}")
 ```
 
-### Model Evaluation
+#### Model Evaluation
 
 ```python
-from src.model.model import build_model, ModelConfig, load_checkpoint
-from src.model.evaluation import run_full_evaluation, plot_confusion_matrix, ID2LABEL
-from src.model.train import get_device
-from src.data.dataset import ReceiptDataset, collate_fn
-from torch.utils.data import DataLoader
+from src.pipelines.evaluation_pipeline import run_evaluation_pipeline, EvaluationConfig
+from src.config import CFG
 
-# Load model
-config = ModelConfig.load("outputs/run_001/config.json")
-model = build_model(config)
-device = get_device()
-
-# Load checkpoint
-load_checkpoint("outputs/run_001/best_model.pt", model)
-
-# Create test loader
-test_dataset = ReceiptDataset("dataset/raw/SROIE2019", "test", max_length=512)
-test_loader = DataLoader(test_dataset, batch_size=8, collate_fn=collate_fn)
-
-# Run evaluation
-results = run_full_evaluation(model, test_loader, device, ID2LABEL)
-
-print(f"Token Accuracy: {results['token_accuracy']:.4f}")
-print(f"Macro F1: {results['ner_metrics']['macro']['f1']:.4f}")
-print("Per-entity F1:")
-for entity, metrics in results['ner_metrics']['per_entity'].items():
-    print(f"  {entity}: {metrics['f1']:.4f}")
-```
-
-### Inference on New Receipt
-
-```python
-from src.model.model import ReceiptFieldExtractor, load_checkpoint
-from src.model.evaluation import extract_entities_from_predictions, ID2LABEL
-from transformers import AutoTokenizer
-import torch
-
-# Load model
-model = ReceiptFieldExtractor(
-    model_path="microsoft/layoutlm-base-uncased",
-    num_labels=9,
+# Evaluate using pipeline
+config = EvaluationConfig(
+    checkpoint_path="artifacts/checkpoints/best_model.pt"
 )
-load_checkpoint("outputs/run_001/best_model.pt", model)
-model.eval()
 
-# Prepare input (from preprocessing)
-tokens = ["ACME", "Corp", "Invoice", "Date:", "2024-01-15", "Total:", "$100.50"]
-bboxes = [[10, 10, 100, 30], [110, 10, 200, 30], ...]  # normalized 0-1000
+summary = run_evaluation_pipeline(config)
 
-# Tokenize
-tokenizer = AutoTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
-encoding = tokenizer(tokens, is_split_into_words=True, return_tensors="pt", padding=True)
+print(f"Macro F1: {summary['ner_metrics']['macro']['f1']:.4f}")
+print(f"Duplicates detected: {summary['fraud_report']['duplicates_found']}")
+```
 
-# Get bbox aligned with tokens
-# ... (alignment logic from dataset.py)
+#### Inference on New Receipt
 
-# Predict
-with torch.no_grad():
-    loss, logits = model(
-        encoding["input_ids"],
-        encoding["attention_mask"],
-        torch.zeros_like(encoding["input_ids"]),
-        bbox_tensor,
-    )
+```python
+from src.inference.predictor import ReceiptPredictor
+from src.config import CFG
 
-# Extract entities
-predictions = model.get_predictions(logits, encoding["attention_mask"])
-entities = extract_entities_from_predictions(tokens, predictions[0], ID2LABEL)
+# Initialize predictor
+predictor = ReceiptPredictor(
+    checkpoint_path="artifacts/checkpoints/best_model.pt"
+)
 
-print(entities)
-# Output: {'company': 'ACME Corp', 'date': '2024-01-15', 'address': '', 'total': '$100.50'}
+# Process receipt image or box file
+result = predictor.predict_from_image("receipt.jpg")
+
+print("Extracted entities:")
+for entity_type, value in result['entities'].items():
+    if value:
+        print(f"  {entity_type}: {value}")
+
+# Check for duplicates
+if result['is_duplicate']:
+    print(f"⚠️  Duplicate detected! Original: {result['duplicate_info']['original_receipt_id']}")
+else:
+    print("✅ New receipt registered")
 ```
 
 ### Testing the Implementation
 
 ```bash
+# Test configuration system
+python src/config.py
+
 # Test preprocessing module
 python src/data/preprocessing.py
 
@@ -296,33 +333,157 @@ python src/model/train.py
 
 # Test evaluation metrics
 python -c "from src.model.evaluation import *; print('Evaluation module OK')"
+
+# Test CLI help
+python main.py --help
 ```
 
 ## Project Structure
 
 ```
 ReceiptGuard-ML/
+├── config.yaml                    # Centralized configuration file
 ├── src/
-│   ├── data/                   # Data loading and preprocessing
-│   │   ├── preprocessing.py    # OCR parsing, entity extraction, bbox normalization
-│   │   ├── dataset.py          # PyTorch dataset with tokenization
-│   │   └── dataloader.py       # Collate utilities & deduplication engine
-│   ├── model/                  # Model architecture and training
-│   │   ├── model.py            # LayoutLM-based NER model with classifier head
-│   │   ├── train.py            # Training loop with mixed precision
-│   │   └── evaluation.py       # NER metrics and fraud detection evaluation
-│   └── pipelines/              # End-to-end pipelines
-│       ├── preprocessing_pipeline.py
-│       ├── model_training_pipeline.py
-│       └── evaluation_pipeline.py
-├── dataset/                    # Dataset directory (gitignored)
-│   ├── raw/                    # Raw SROIE2019 data
-│   └── processed/              # Processed data cache
-├── dataset.md                  # Dataset documentation
-├── pyproject.toml             # Project configuration
-├── main.py                    # Main entry point
-└── README.md                  # This file
+│   ├── config.py                  # Configuration management system
+│   ├── main.py                    # CLI entry point
+│   ├── data/                      # Data loading and preprocessing
+│   │   ├── preprocessing.py       # OCR parsing, entity extraction, bbox normalization
+│   │   ├── dataset.py             # PyTorch dataset with tokenization
+│   │   └── dataloader.py          # Collate utilities & deduplication engine
+│   ├── model/                     # Model architecture and training
+│   │   ├── model.py               # LayoutLM-based NER model with classifier head
+│   │   ├── train.py               # Training loop with mixed precision
+│   │   └── evaluation.py          # NER metrics and fraud detection evaluation
+│   ├── pipelines/                 # End-to-end pipelines
+│   │   ├── preprocessing_pipeline.py
+│   │   ├── model_training_pipeline.py
+│   │   └── evaluation_pipeline.py
+│   └── inference/                 # Inference system
+│       └── predictor.py           # Receipt predictor with OCR and deduplication
+├── artifacts/                     # Generated artifacts (gitignored)
+│   ├── checkpoints/               # Model checkpoints
+│   ├── evaluation/                # Evaluation results
+│   ├── logs/                      # Training logs
+│   └── ledger.json                # Fraud detection ledger
+├── dataset/                       # Dataset directory (gitignored)
+│   ├── raw/                       # Raw SROIE2019 data
+│   └── processed/                 # Processed data cache
+├── dataset.md                     # Dataset documentation
+├── pyproject.toml                 # Project configuration
+└── README.md                      # This file
 ```
+
+## Configuration Reference
+
+### Configuration Sections
+
+#### Project
+- `name`: Project name
+- `description`: Project description
+- `version`: Project version
+
+#### Paths
+- `artifacts_dir`: Base directory for generated artifacts
+- `checkpoints_dir`: Model checkpoint storage
+- `evaluation_dir`: Evaluation results storage
+- `logs_dir`: Training logs storage
+- `ledger_path`: Fraud detection ledger file
+- `raw_data_dir`: Raw dataset location
+- `processed_data_dir`: Processed dataset cache
+- `model_dir`: Pretrained model location
+
+#### Data
+- `max_length`: Maximum sequence length for tokenization
+- `train_split`: Training split name
+- `test_split`: Test split name
+- `ledger_filename`: Ledger file name
+
+#### Model
+- `model_path`: Path to pretrained LayoutLM model
+- `num_labels`: Number of NER labels
+- `dropout`: Dropout rate
+- `hidden_size`: Model hidden size
+
+#### Training
+- `num_epochs`: Number of training epochs
+- `batch_size`: Training batch size
+- `learning_rate`: Learning rate
+- `weight_decay`: Weight decay
+- `warmup_ratio`: Warmup ratio
+- `warmup_steps`: Warmup steps
+- `max_grad_norm`: Maximum gradient norm
+- `seed`: Random seed
+- `output_dir`: Output directory for checkpoints
+
+#### Inference
+- `checkpoint_dir`: Default checkpoint directory
+- `default_checkpoint`: Default checkpoint filename
+- `ledger_path`: Inference ledger path
+- `max_length`: Inference max sequence length
+- `batch_size`: Inference batch size
+
+#### Kaggle
+- `input_path`: Kaggle input directory
+- `working_path`: Kaggle working directory
+- `receiptguard_path`: Kaggle dataset path
+- `sroie2019_path`: Kaggle SROIE2019 path
+- `optimized_batch_size`: Optimized batch size for Kaggle
+- `optimized_epochs`: Optimized epochs for Kaggle
+
+## CLI Reference
+
+### Global Options
+- `--version`: Show version information
+- `--help`: Show help message
+
+### Subcommands
+
+#### preprocess
+```bash
+python main.py preprocess [OPTIONS]
+```
+Options:
+- `--raw_path`: Path to raw dataset (default: from config)
+- `--processed_path`: Path for processed output (default: from config)
+- `--splits`: Dataset splits to process (default: ["train", "test"])
+- `--verify_images`: Verify image files during preprocessing
+
+#### train
+```bash
+python main.py train [OPTIONS]
+```
+Options:
+- `--model_path`: Path to pretrained LayoutLM model
+- `--num_labels`: Number of NER labels
+- `--dropout`: Dropout rate
+- `--output_dir`: Output directory for checkpoints
+- `--num_epochs`: Number of training epochs
+- `--batch_size`: Batch size
+- `--max_length`: Maximum sequence length
+- `--learning_rate`: Learning rate
+- `--weight_decay`: Weight decay
+- `--warmup_ratio`: Warmup ratio
+- `--seed`: Random seed
+- `--data_path`: Path to dataset
+
+#### evaluate
+```bash
+python main.py evaluate [OPTIONS]
+```
+Options:
+- `--checkpoint_path`: Path to model checkpoint (required)
+- `--model_path`: Path to LayoutLM model
+- `--processed_data_path`: Path to processed data
+- `--output_dir`: Output directory for evaluation results
+- `--batch_size`: Batch size for evaluation
+- `--no_fraud_detection`: Skip fraud detection
+
+#### full
+```bash
+python main.py full [OPTIONS]
+```
+Runs complete pipeline: preprocess → train → evaluate
+Includes all options from preprocess, train, and evaluate subcommands.
 
 ## Data Format
 
@@ -399,6 +560,15 @@ pytest
 
 ## Implementation Details
 
+### Configuration System Features
+- **Centralized Management**: All settings in `config.yaml`
+- **Type Safety**: Automatic type conversion and validation
+- **Runtime Overrides**: CLI arguments override config values
+- **Path Resolution**: Automatic absolute path generation and directory creation
+- **Environment Support**: Kaggle notebook compatibility
+- **Attribute Access**: `CFG.training.batch_size` syntax
+- **Dot Notation**: `CFG.get('training.batch_size')` support
+
 ### Preprocessing Features
 - **Robust OCR Parsing**: Handles malformed box files gracefully
 - **Entity Normalization**: 
@@ -417,13 +587,13 @@ pytest
 - **Full Fine-Tuning**: All LayoutLM layers trainable (no frozen parameters)
 - **Custom Classifier**: Xavier-initialized linear head with dropout regularization
 - **Mixed Precision Training**: Automatic AMP when CUDA available (faster, less memory)
-- **Gradient Clipping**: Max norm 1.0 for training stability
+- **Gradient Clipping**: Configurable max norm via `CFG.training.max_grad_norm`
 - **Checkpoint Management**: Best model tracking + final model save
 - **TensorBoard Integration**: Live loss/accuracy/LR logging
 
 ### Training Features
 - **AdamW Optimizer**: Weight decay on non-bias/LayerNorm parameters only
-- **Linear Warmup**: Configurable warmup steps followed by linear decay
+- **Linear Warmup**: Configurable warmup ratio via `CFG.training.warmup_ratio`
 - **Automatic Device Detection**: CUDA → MPS → CPU fallback
 - **Progress Bars**: Live loss display with tqdm
 - **Training Curves**: Auto-generated matplotlib plots (loss + accuracy)
@@ -450,10 +620,14 @@ pytest
 - [x] Add evaluation metrics (F1, precision, recall)
 - [x] Implement model serialization and loading
 - [x] Add duplicate detection functionality
-- [ ] Create inference pipeline for new receipts
+- [x] Create centralized configuration system
+- [x] Implement CLI interface
+- [x] Add inference pipeline for new receipts
 - [ ] Add comprehensive test suite
 - [ ] Create web interface for receipt processing
 - [ ] Export models to ONNX for production deployment
+- [ ] Add model quantization for mobile deployment
+- [ ] Implement multi-language support
 
 ## License
 
@@ -468,3 +642,11 @@ MIT License
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
+
+### Development Guidelines
+
+1. **Configuration**: Always use `CFG` for configuration values, never hardcode
+2. **CLI Integration**: Update CLI arguments when adding new configuration options
+3. **Testing**: Add tests for new functionality
+4. **Documentation**: Update README and docstrings
+5. **Code Style**: Follow existing code style and use black for formatting
