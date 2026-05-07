@@ -332,6 +332,46 @@ def run_training_pipeline(config: TrainingConfig) -> Dict:
             'output_dir': config.output_dir,
         }
 
+        # Save training report to text file
+        report_path = output_dir / "training_report.txt"
+        with open(report_path, "w", encoding='utf-8') as f:
+            f.write("=" * 70 + "\n")
+            f.write("ReceiptGuard-ML Training Report\n")
+            f.write("=" * 70 + "\n\n")
+            f.write(f"Status: Completed Successfully\n")
+            f.write(f"Device: {device}\n")
+            f.write(f"Model: {config.model_path}\n")
+            f.write(f"Total Parameters: {total_params:,}\n")
+            f.write(f"Trainable Parameters: {trainable_params:,}\n\n")
+            f.write("-" * 70 + "\n")
+            f.write("Training Configuration\n")
+            f.write("-" * 70 + "\n")
+            f.write(f"Epochs: {config.num_epochs}\n")
+            f.write(f"Batch Size: {config.batch_size}\n")
+            f.write(f"Learning Rate: {config.learning_rate}\n")
+            f.write(f"Weight Decay: {config.weight_decay}\n")
+            f.write(f"Warmup Ratio: {config.warmup_ratio}\n")
+            f.write(f"Max Length: {config.max_length}\n")
+            f.write(f"Dropout: {config.dropout}\n\n")
+            f.write("-" * 70 + "\n")
+            f.write("Training Results\n")
+            f.write("-" * 70 + "\n")
+            f.write(f"Best Eval Loss: {trainer.best_eval_loss:.4f}\n")
+            f.write(f"Best Checkpoint: {trainer.best_checkpoint_path}\n\n")
+            f.write("-" * 70 + "\n")
+            f.write("Per-Epoch Results\n")
+            f.write("-" * 70 + "\n")
+            f.write(f"{'Epoch':<8}{'Train Loss':<14}{'Train Acc':<14}{'Eval Loss':<14}{'Eval Acc':<14}\n")
+            f.write("-" * 70 + "\n")
+            for i, epoch in enumerate(trainer.history['epochs']):
+                train_loss = trainer.history['train_loss'][i]
+                train_acc = trainer.history['train_accuracy'][i]
+                eval_loss = trainer.history['eval_loss'][i]
+                eval_acc = trainer.history['eval_accuracy'][i]
+                f.write(f"{epoch:<8}{train_loss:<14.4f}{train_acc:<14.4f}{eval_loss:<14.4f}{eval_acc:<14.4f}\n")
+            f.write("=" * 70 + "\n")
+        logger.info(f"Training report saved to: {report_path}")
+
         logger.info("=" * 70)
         logger.info("Training Pipeline Completed Successfully!")
         logger.info("=" * 70)

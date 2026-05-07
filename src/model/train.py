@@ -57,12 +57,14 @@ def train_one_epoch(
         max_grad_norm: Maximum gradient norm for clipping
         
     Returns:
-        Dictionary with {epoch, train_loss, train_loss_per_step: list}
+        Dictionary with {epoch, train_loss, train_accuracy, train_loss_per_step: list}
     """
     if max_grad_norm is None:
         max_grad_norm = CFG.training.max_grad_norm
     model.train()
     total_loss = 0.0
+    total_correct = 0
+    total_tokens = 0
     loss_per_step = []
     num_batches = len(dataloader)
     
@@ -123,16 +125,26 @@ def train_one_epoch(
         total_loss += loss_value
         loss_per_step.append(loss_value)
         
+        # Track training accuracy
+        if labels is not None:
+            preds = torch.argmax(logits, dim=-1)
+            valid_mask = labels != -100
+            correct = (preds == labels) & valid_mask
+            total_correct += correct.sum().item()
+            total_tokens += valid_mask.sum().item()
+        
         # Update progress bar
         pbar.set_postfix({"loss": f"{loss_value:.4f}"})
     
     pbar.close()
     
     avg_loss = total_loss / num_batches if num_batches > 0 else 0.0
+    train_accuracy = total_correct / total_tokens if total_tokens > 0 else 0.0
     
     return {
         "epoch": epoch_num,
         "train_loss": avg_loss,
+        "train_accuracy": train_accuracy,
         "train_loss_per_step": loss_per_step,
     }
 
@@ -286,8 +298,9 @@ class Trainer:
         self.history = {
             "epochs": [],
             "train_loss": [],
+            "train_accuracy": [],
             "eval_loss": [],
-            "token_accuracy": [],
+            "eval_accuracy": [],
         }
         
         # Best model tracking
@@ -334,6 +347,7 @@ class Trainer:
             )
             
             train_loss = train_results["train_loss"]
+            train_accuracy = train_results["train_accuracy"]
             
             # Evaluation phase
             eval_results = evaluate_on_loader(
@@ -343,26 +357,29 @@ class Trainer:
             )
             
             eval_loss = eval_results["eval_loss"]
-            token_accuracy = eval_results["token_accuracy"]
+            eval_accuracy = eval_results["token_accuracy"]
             
             # Update history
             self.history["epochs"].append(epoch)
             self.history["train_loss"].append(train_loss)
+            self.history["train_accuracy"].append(train_accuracy)
             self.history["eval_loss"].append(eval_loss)
-            self.history["token_accuracy"].append(token_accuracy)
+            self.history["eval_accuracy"].append(eval_accuracy)
             
             # Log to console
             print(
                 f"Epoch {epoch}/{num_epochs} | "
                 f"Train Loss: {train_loss:.4f} | "
+                f"Train Acc: {train_accuracy:.4f} | "
                 f"Eval Loss: {eval_loss:.4f} | "
-                f"Token Acc: {token_accuracy:.4f}"
+                f"Eval Acc: {eval_accuracy:.4f}"
             )
             
             # Log to TensorBoard
             self.writer.add_scalar("Loss/train", train_loss, epoch)
             self.writer.add_scalar("Loss/eval", eval_loss, epoch)
-            self.writer.add_scalar("Accuracy/token", token_accuracy, epoch)
+            self.writer.add_scalar("Accuracy/train", train_accuracy, epoch)
+            self.writer.add_scalar("Accuracy/eval", eval_accuracy, epoch)
             self.writer.add_scalar("Learning_rate", optimizer.param_groups[0]["lr"], epoch)
             
             # Save best checkpoint
@@ -428,14 +445,21 @@ class Trainer:
         ax2 = axes[1]
         ax2.plot(
             epochs,
-            self.history["token_accuracy"],
-            "g-",
-            label="Token Accuracy",
+            self.history["train_accuracy"],
+            "b-",
+            label="Train Accuracy",
+            linewidth=2,
+        )
+        ax2.plot(
+            epochs,
+            self.history["eval_accuracy"],
+            "r-",
+            label="Eval Accuracy",
             linewidth=2,
         )
         ax2.set_xlabel("Epoch")
         ax2.set_ylabel("Accuracy")
-        ax2.set_title("Token-Level Accuracy")
+        ax2.set_title("Training and Evaluation Accuracy")
         ax2.legend()
         ax2.grid(True, alpha=0.3)
         ax2.set_ylim([0, 1])
