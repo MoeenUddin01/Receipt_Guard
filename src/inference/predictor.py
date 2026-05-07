@@ -26,6 +26,9 @@ from model import ModelConfig, ReceiptFieldExtractor, load_checkpoint
 from preprocessing import normalize_bbox_for_layoutlm, parse_box_file
 from train import get_device
 
+# Import configuration
+from src.config import CFG
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -40,10 +43,10 @@ except ImportError:
     PYTESSERACT_AVAILABLE = False
     logger.warning("pytesseract not installed. OCR functionality will not be available.")
 
-# Default paths
-DEFAULT_CHECKPOINT_DIR = Path("dataset/processed/checkpoints")
-DEFAULT_LEDGER_PATH = Path("dataset/processed/inference_ledger.json")
-DEFAULT_MODEL_PATH = "dataset/raw/SROIE2019/layoutlm-base-uncased"
+# Default paths from CFG
+DEFAULT_CHECKPOINT_DIR = CFG.inference.checkpoint_dir
+DEFAULT_LEDGER_PATH = CFG.inference.ledger_path
+DEFAULT_MODEL_PATH = CFG.model.model_path
 
 
 def run_ocr_on_image(image_path: str) -> List[Dict]:
@@ -197,22 +200,21 @@ def load_model_for_inference(
 def tokenize_for_layoutlm(
     tokens: List[Dict],
     tokenizer: AutoTokenizer,
-    max_length: int = 512,
+    max_length: int = None,
 ) -> Dict[str, torch.Tensor]:
     """
-    Tokenize OCR tokens for LayoutLM input.
-
-    Each word token is tokenized and paired with its bounding box.
-    The bbox is repeated for all subword tokens.
-
+    Convert tokens to model input tensors.
+    
     Args:
-        tokens: List of token dicts from OCR or box file
+        tokens: List of token dictionaries from parse_box_file or OCR
         tokenizer: LayoutLM tokenizer
         max_length: Maximum sequence length
-
+        
     Returns:
-        Dictionary with input_ids, attention_mask, bbox tensors
+        Dictionary with input_ids, attention_mask, bbox, token_type_ids
     """
+    if max_length is None:
+        max_length = CFG.inference.max_length
     # Collect words and their bboxes
     words = [t["text"] for t in tokens]
     bboxes = [t["bbox_normalized"] for t in tokens]
@@ -253,6 +255,7 @@ def tokenize_for_layoutlm(
         "input_ids": encoding["input_ids"],
         "attention_mask": encoding["attention_mask"],
         "bbox": bbox_tensor,
+        "token_type_ids": torch.zeros_like(encoding["input_ids"]),
     }
 
 
@@ -261,21 +264,23 @@ def run_inference(
     tokenizer: AutoTokenizer,
     tokens: List[Dict],
     device: torch.device,
-    max_length: int = 512,
+    max_length: int = None,
 ) -> tuple:
     """
-    Run model inference on tokenized input.
-
+    Run model inference on tokens.
+    
     Args:
-        model: Loaded model
-        tokenizer: Tokenizer
+        model: Trained ReceiptFieldExtractor model
+        tokenizer: LayoutLM tokenizer
         tokens: List of token dictionaries
         device: Device
         max_length: Max sequence length
-
+        
     Returns:
-        Tuple of (predictions_list, extracted_entities_dict)
+        Tuple of (predictions, attention_mask)
     """
+    if max_length is None:
+        max_length = CFG.inference.max_length
     # Tokenize
     inputs = tokenize_for_layoutlm(tokens, tokenizer, max_length)
 

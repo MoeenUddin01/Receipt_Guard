@@ -12,6 +12,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "data"))
 
 from preprocessing import build_processed_sample
 
+# Import configuration
+from src.config import CFG
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -23,14 +26,18 @@ logger = logging.getLogger(__name__)
 @dataclass
 class PreprocessingConfig:
     """Configuration for the preprocessing pipeline."""
-    raw_data_path: str = "dataset/raw/SROIE2019"
-    processed_data_path: str = "dataset/processed"
+    raw_data_path: str = None
+    processed_data_path: str = None
     splits: list = None
     verify_images: bool = True
 
     def __post_init__(self):
+        if self.raw_data_path is None:
+            self.raw_data_path = CFG.paths.raw_data_path
+        if self.processed_data_path is None:
+            self.processed_data_path = CFG.paths.processed_data_path
         if self.splits is None:
-            self.splits = ["train", "test"]
+            self.splits = [CFG.data.train_split, CFG.data.test_split]
 
 
 def verify_dataset_integrity(config: PreprocessingConfig) -> Dict[str, Dict]:

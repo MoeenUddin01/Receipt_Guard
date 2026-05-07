@@ -21,6 +21,9 @@ from src.model.model import (
     save_checkpoint,
 )
 
+# Import configuration
+from src.config import CFG
+
 
 def get_device() -> torch.device:
     """Detect best available device: CUDA > MPS > CPU."""
@@ -39,7 +42,7 @@ def train_one_epoch(
     scheduler,
     device: torch.device,
     epoch_num: int,
-    max_grad_norm: float = 1.0,
+    max_grad_norm: float = None,
 ) -> dict:
     """
     Run one training epoch.
@@ -50,12 +53,14 @@ def train_one_epoch(
         optimizer: Optimizer instance
         scheduler: Learning rate scheduler
         device: Device to train on
-        epoch_num: Current epoch number (for logging)
+        epoch_num: Current epoch number
         max_grad_norm: Maximum gradient norm for clipping
         
     Returns:
         Dictionary with {epoch, train_loss, train_loss_per_step: list}
     """
+    if max_grad_norm is None:
+        max_grad_norm = CFG.training.max_grad_norm
     model.train()
     total_loss = 0.0
     loss_per_step = []

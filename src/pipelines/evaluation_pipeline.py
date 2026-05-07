@@ -29,6 +29,9 @@ from evaluation import (
     plot_confusion_matrix,
 )
 
+# Import configuration
+from src.config import CFG
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -41,15 +44,23 @@ logger = logging.getLogger(__name__)
 class EvaluationConfig:
     """Configuration for evaluation pipeline."""
     checkpoint_path: str  # Required - path to best checkpoint
-    model_path: str = "dataset/raw/SROIE2019/layoutlm-base-uncased"
-    processed_data_path: str = "dataset/processed"
-    output_dir: str = "dataset/processed/evaluation"
-    batch_size: int = 8
+    model_path: str = None
+    processed_data_path: str = None
+    output_dir: str = None
+    batch_size: int = None
     run_fraud_detection: bool = True
 
     def __post_init__(self):
         if not self.checkpoint_path:
             raise ValueError("checkpoint_path is required")
+        if self.model_path is None:
+            self.model_path = CFG.model.model_path
+        if self.processed_data_path is None:
+            self.processed_data_path = CFG.paths.processed_data_path
+        if self.output_dir is None:
+            self.output_dir = CFG.paths.evaluation_dir
+        if self.batch_size is None:
+            self.batch_size = CFG.inference.batch_size
 
 
 def load_model_from_checkpoint(checkpoint_path: str, device: torch.device) -> ReceiptFieldExtractor:

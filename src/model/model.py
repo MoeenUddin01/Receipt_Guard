@@ -12,6 +12,9 @@ import torch.nn as nn
 from torch import Tensor
 from transformers import LayoutLMModel
 
+# Import configuration
+from src.config import CFG
+
 
 @dataclass
 class ModelConfig:
@@ -19,11 +22,24 @@ class ModelConfig:
 
     model_path: str
     num_labels: int
-    dropout: float = 0.1
-    learning_rate: float = 5e-5
-    weight_decay: float = 0.01
-    warmup_steps: int = 500
-    max_length: int = 512
+    dropout: float = None
+    learning_rate: float = None
+    weight_decay: float = None
+    warmup_steps: int = None
+    max_length: int = None
+    
+    def __post_init__(self):
+        """Set default values from CFG if not provided."""
+        if self.dropout is None:
+            self.dropout = CFG.model.dropout
+        if self.learning_rate is None:
+            self.learning_rate = CFG.training.learning_rate
+        if self.weight_decay is None:
+            self.weight_decay = CFG.training.weight_decay
+        if self.warmup_steps is None:
+            self.warmup_steps = CFG.training.warmup_steps
+        if self.max_length is None:
+            self.max_length = CFG.data.max_length
 
     def save(self, path: str) -> None:
         """Save config to JSON file."""
@@ -49,7 +65,7 @@ class ReceiptFieldExtractor(nn.Module):
     - Linear classifier head: hidden_size -> num_labels
     """
 
-    def __init__(self, model_path: str, num_labels: int, dropout: float = 0.1):
+    def __init__(self, model_path: str, num_labels: int, dropout: float = None):
         """
         Initialize the receipt field extractor.
         
@@ -58,6 +74,8 @@ class ReceiptFieldExtractor(nn.Module):
             num_labels: Number of NER labels (including O tag)
             dropout: Dropout probability for classifier
         """
+        if dropout is None:
+            dropout = CFG.model.dropout
         super().__init__()
         
         # Load LayoutLM encoder (no frozen layers - full fine-tuning)
@@ -248,21 +266,19 @@ if __name__ == "__main__":
     print("Testing ReceiptFieldExtractor")
     print("=" * 60)
     
-    # Use microsoft/layoutlm-base-uncased as dummy path
-    # In practice, this should be a local path with downloaded weights
-    dummy_config = ModelConfig(
-        model_path="microsoft/layoutlm-base-uncased",
-        num_labels=12,  # Example: O, B-AMOUNT, I-AMOUNT, B-DATE, I-DATE, etc.
-        dropout=0.1,
-        learning_rate=5e-5,
-        weight_decay=0.01,
-        warmup_steps=500,
-        max_length=512,
-    )
-    
+    # Use CFG configuration
+    config = ModelConfig(
+        model_path=CFG.model.model_path,
+        num_labels=CFG.model.num_labels,
+        dropout=CFG.model.dropout,
+        learning_rate=CFG.training.learning_rate,
+        weight_decay=CFG.training.weight_decay,
+        warmup_steps=CFG.training.warmup_steps,
+        max_length=CFG.data.max_length,
+    )  
     print("\nBuilding model...")
     try:
-        model = build_model(dummy_config)
+        model = build_model(config)
         
         # Create dummy input tensors
         batch_size = 2

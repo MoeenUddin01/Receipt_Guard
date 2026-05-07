@@ -9,6 +9,9 @@ from transformers import AutoTokenizer
 
 from preprocessing import build_processed_sample
 
+# Import configuration
+from src.config import CFG
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -44,8 +47,8 @@ class ReceiptDataset(Dataset):
         self,
         data_path: str,
         split: str,
-        tokenizer_name: str = "microsoft/layoutlm-base-uncased",
-        max_length: int = 512,
+        tokenizer_name: str = None,
+        max_length: int = None,
         cache_dir: Optional[str] = None
     ):
         """
@@ -58,6 +61,10 @@ class ReceiptDataset(Dataset):
             max_length: Maximum sequence length
             cache_dir: Optional cache directory for processed data
         """
+        if tokenizer_name is None:
+            tokenizer_name = CFG.model.model_path
+        if max_length is None:
+            max_length = CFG.data.max_length
         self.data_path = Path(data_path)
         self.split = split
         self.max_length = max_length
@@ -258,9 +265,9 @@ if __name__ == "__main__":
     # Initialize dataset
     try:
         dataset = ReceiptDataset(
-            data_path="/home/moeen/projects/ReceiptGuard-ML/dataset/raw/SROIE2019",
+            data_path=CFG.data.raw_data_path,
             split="train",
-            max_length=128  # Use smaller max_length for testing
+            max_length=CFG.data.max_length  # Use smaller max_length for testing
         )
         
         print(f"Dataset size: {len(dataset)}")

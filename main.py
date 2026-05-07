@@ -12,7 +12,7 @@ Usage examples:
     receiptguard train --num_epochs 10 --batch_size 4 --learning_rate 3e-5
 
     # Evaluate a checkpoint
-    receiptguard evaluate --checkpoint_path dataset/processed/checkpoints/best_model.pt
+    receiptguard evaluate --checkpoint_path artifacts/checkpoints/best_model.pt
 
     # Preprocess only
     receiptguard preprocess --raw_path /path/to/data --processed_path /path/to/output
@@ -27,6 +27,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "src" / "pipelines"))
 sys.path.insert(0, str(Path(__file__).parent / "src" / "data"))
 sys.path.insert(0, str(Path(__file__).parent / "src" / "model"))
+
+# Import configuration
+from src.config import CFG, override_config
 
 from preprocessing_pipeline import (
     run_preprocessing_pipeline,
@@ -65,9 +68,19 @@ def cmd_preprocess(args) -> int:
 
     start_time = time.time()
 
+    # Apply CLI overrides to config
+    overrides = {}
+    if args.raw_path != CFG.paths.raw_data_path:
+        overrides['paths.raw_data_path'] = args.raw_path
+    if args.processed_path != CFG.paths.processed_data_path:
+        overrides['paths.processed_data_path'] = args.processed_path
+    
+    if overrides:
+        override_config(overrides)
+
     config = PreprocessingConfig(
-        raw_data_path=args.raw_path,
-        processed_data_path=args.processed_path,
+        raw_data_path=CFG.paths.raw_data_path,
+        processed_data_path=CFG.paths.processed_data_path,
         splits=args.splits,
         verify_images=args.verify_images,
     )
@@ -100,19 +113,49 @@ def cmd_train(args) -> int:
 
     start_time = time.time()
 
+    # Apply CLI overrides to config
+    overrides = {}
+    if args.model_path != CFG.model.model_path:
+        overrides['model.model_path'] = args.model_path
+    if args.num_labels != CFG.model.num_labels:
+        overrides['model.num_labels'] = args.num_labels
+    if args.dropout != CFG.model.dropout:
+        overrides['model.dropout'] = args.dropout
+    if args.output_dir != CFG.training.output_dir:
+        overrides['training.output_dir'] = args.output_dir
+    if args.num_epochs != CFG.training.num_epochs:
+        overrides['training.num_epochs'] = args.num_epochs
+    if args.batch_size != CFG.training.batch_size:
+        overrides['training.batch_size'] = args.batch_size
+    if args.max_length != CFG.data.max_length:
+        overrides['data.max_length'] = args.max_length
+    if args.learning_rate != CFG.training.learning_rate:
+        overrides['training.learning_rate'] = args.learning_rate
+    if args.weight_decay != CFG.training.weight_decay:
+        overrides['training.weight_decay'] = args.weight_decay
+    if args.warmup_ratio != CFG.training.warmup_ratio:
+        overrides['training.warmup_ratio'] = args.warmup_ratio
+    if args.seed != CFG.training.seed:
+        overrides['training.seed'] = args.seed
+    if args.data_path != CFG.data.raw_data_path:
+        overrides['data.raw_data_path'] = args.data_path
+    
+    if overrides:
+        override_config(overrides)
+
     config = TrainingConfig(
-        model_path=args.model_path,
-        num_labels=args.num_labels,
-        dropout=args.dropout,
-        output_dir=args.output_dir,
-        num_epochs=args.num_epochs,
-        batch_size=args.batch_size,
-        max_length=args.max_length,
-        learning_rate=args.learning_rate,
-        weight_decay=args.weight_decay,
-        warmup_ratio=args.warmup_ratio,
-        seed=args.seed,
-        data_path=args.data_path,
+        model_path=CFG.model.model_path,
+        num_labels=CFG.model.num_labels,
+        dropout=CFG.model.dropout,
+        output_dir=CFG.training.output_dir,
+        num_epochs=CFG.training.num_epochs,
+        batch_size=CFG.training.batch_size,
+        max_length=CFG.data.max_length,
+        learning_rate=CFG.training.learning_rate,
+        weight_decay=CFG.training.weight_decay,
+        warmup_ratio=CFG.training.warmup_ratio,
+        seed=CFG.training.seed,
+        data_path=CFG.data.raw_data_path,
     )
 
     try:
@@ -140,12 +183,26 @@ def cmd_evaluate(args) -> int:
 
     start_time = time.time()
 
+    # Apply CLI overrides to config
+    overrides = {}
+    if args.model_path != CFG.model.model_path:
+        overrides['model.model_path'] = args.model_path
+    if args.processed_data_path != CFG.paths.processed_data_path:
+        overrides['paths.processed_data_path'] = args.processed_data_path
+    if args.output_dir != CFG.paths.evaluation_dir:
+        overrides['paths.evaluation_dir'] = args.output_dir
+    if args.batch_size != CFG.inference.batch_size:
+        overrides['inference.batch_size'] = args.batch_size
+    
+    if overrides:
+        override_config(overrides)
+
     config = EvaluationConfig(
         checkpoint_path=args.checkpoint_path,
-        model_path=args.model_path,
-        processed_data_path=args.processed_data_path,
-        output_dir=args.output_dir,
-        batch_size=args.batch_size,
+        model_path=CFG.model.model_path,
+        processed_data_path=CFG.paths.processed_data_path,
+        output_dir=CFG.paths.evaluation_dir,
+        batch_size=CFG.inference.batch_size,
         run_fraud_detection=not args.no_fraud_detection,
     )
 
@@ -180,14 +237,42 @@ def cmd_full(args) -> int:
     overall_start = time.time()
     exit_code = 0
 
+    # Apply CLI overrides to config
+    overrides = {}
+    if args.raw_path != CFG.paths.raw_data_path:
+        overrides['paths.raw_data_path'] = args.raw_path
+    if args.processed_path != CFG.paths.processed_data_path:
+        overrides['paths.processed_data_path'] = args.processed_path
+    if args.model_path != CFG.model.model_path:
+        overrides['model.model_path'] = args.model_path
+    if args.num_epochs != CFG.training.num_epochs:
+        overrides['training.num_epochs'] = args.num_epochs
+    if args.batch_size != CFG.training.batch_size:
+        overrides['training.batch_size'] = args.batch_size
+    if args.max_length != CFG.data.max_length:
+        overrides['data.max_length'] = args.max_length
+    if args.learning_rate != CFG.training.learning_rate:
+        overrides['training.learning_rate'] = args.learning_rate
+    if args.seed != CFG.training.seed:
+        overrides['training.seed'] = args.seed
+    if args.data_path != CFG.data.raw_data_path:
+        overrides['data.raw_data_path'] = args.data_path
+    if args.checkpoint_dir != CFG.training.output_dir:
+        overrides['training.output_dir'] = args.checkpoint_dir
+    if args.eval_output_dir != CFG.paths.evaluation_dir:
+        overrides['paths.evaluation_dir'] = args.eval_output_dir
+    
+    if overrides:
+        override_config(overrides)
+
     # Step 1: Preprocess
     print("\n" + "-" * 60)
     print("STEP 1/3: Preprocessing")
     print("-" * 60)
 
     preprocess_args = argparse.Namespace(
-        raw_path=args.raw_path,
-        processed_path=args.processed_path,
+        raw_path=CFG.paths.raw_data_path,
+        processed_path=CFG.paths.processed_data_path,
         splits=args.splits,
         verify_images=args.verify_images,
     )
@@ -203,18 +288,18 @@ def cmd_full(args) -> int:
     print("-" * 60)
 
     train_args = argparse.Namespace(
-        model_path=args.model_path,
-        num_labels=args.num_labels,
-        dropout=args.dropout,
-        output_dir=args.checkpoint_dir,
-        num_epochs=args.num_epochs,
-        batch_size=args.batch_size,
-        max_length=args.max_length,
-        learning_rate=args.learning_rate,
-        weight_decay=args.weight_decay,
-        warmup_ratio=args.warmup_ratio,
-        seed=args.seed,
-        data_path=args.data_path,
+        model_path=CFG.model.model_path,
+        num_labels=CFG.model.num_labels,
+        dropout=CFG.model.dropout,
+        output_dir=CFG.training.output_dir,
+        num_epochs=CFG.training.num_epochs,
+        batch_size=CFG.training.batch_size,
+        max_length=CFG.data.max_length,
+        learning_rate=CFG.training.learning_rate,
+        weight_decay=CFG.training.weight_decay,
+        warmup_ratio=CFG.training.warmup_ratio,
+        seed=CFG.training.seed,
+        data_path=CFG.data.raw_data_path,
     )
 
     result = cmd_train(train_args)
@@ -228,14 +313,14 @@ def cmd_full(args) -> int:
     print("-" * 60)
 
     # Infer checkpoint path from training output
-    checkpoint_path = Path(args.checkpoint_dir) / "best_model.pt"
+    checkpoint_path = Path(CFG.training.output_dir) / CFG.training.checkpoint_filename
 
     evaluate_args = argparse.Namespace(
         checkpoint_path=str(checkpoint_path),
-        model_path=args.model_path,
-        processed_data_path=args.processed_path,
-        output_dir=args.eval_output_dir,
-        batch_size=args.batch_size,
+        model_path=CFG.model.model_path,
+        processed_data_path=CFG.paths.processed_data_path,
+        output_dir=CFG.paths.evaluation_dir,
+        batch_size=CFG.inference.batch_size,
         no_fraud_detection=not args.run_fraud_detection,
     )
 
@@ -251,7 +336,7 @@ def cmd_full(args) -> int:
     print("=" * 60)
     print(f"Total elapsed time: {overall_elapsed:.2f}s")
     print(f"Checkpoint: {checkpoint_path}")
-    print(f"Evaluation: {args.eval_output_dir}")
+    print(f"Evaluation: {CFG.paths.evaluation_dir}")
     print("=" * 60)
 
     return 0
@@ -272,7 +357,7 @@ Examples:
   receiptguard train --num_epochs 10 --batch_size 4 --learning_rate 3e-5
 
   # Evaluate a checkpoint
-  receiptguard evaluate --checkpoint_path dataset/processed/checkpoints/best_model.pt
+  receiptguard evaluate --checkpoint_path artifacts/checkpoints/best_model.pt
 
   # Preprocess only
   receiptguard preprocess --raw_path /path/to/data
@@ -297,13 +382,13 @@ Examples:
     preprocess_parser.add_argument(
         "--raw_path",
         type=str,
-        default="dataset/raw/SROIE2019",
+        default=CFG.paths.raw_data_path,
         help="Path to raw dataset",
     )
     preprocess_parser.add_argument(
         "--processed_path",
         type=str,
-        default="dataset/processed",
+        default=CFG.paths.processed_data_path,
         help="Path for processed output",
     )
     preprocess_parser.add_argument(
@@ -330,73 +415,73 @@ Examples:
     train_parser.add_argument(
         "--model_path",
         type=str,
-        default="dataset/raw/SROIE2019/layoutlm-base-uncased",
+        default=CFG.model.model_path,
         help="Path to pretrained LayoutLM model",
     )
     train_parser.add_argument(
         "--num_labels",
         type=int,
-        default=9,
+        default=CFG.model.num_labels,
         help="Number of NER labels",
     )
     train_parser.add_argument(
         "--dropout",
         type=float,
-        default=0.1,
+        default=CFG.model.dropout,
         help="Dropout rate",
     )
     train_parser.add_argument(
         "--output_dir",
         type=str,
-        default="dataset/processed/checkpoints",
+        default=CFG.training.output_dir,
         help="Output directory for checkpoints",
     )
     train_parser.add_argument(
         "--num_epochs",
         type=int,
-        default=10,
+        default=CFG.training.num_epochs,
         help="Number of training epochs",
     )
     train_parser.add_argument(
         "--batch_size",
         type=int,
-        default=8,
+        default=CFG.training.batch_size,
         help="Batch size",
     )
     train_parser.add_argument(
         "--max_length",
         type=int,
-        default=512,
+        default=CFG.data.max_length,
         help="Maximum sequence length",
     )
     train_parser.add_argument(
         "--learning_rate",
         type=float,
-        default=5e-5,
+        default=CFG.training.learning_rate,
         help="Learning rate",
     )
     train_parser.add_argument(
         "--weight_decay",
         type=float,
-        default=0.01,
+        default=CFG.training.weight_decay,
         help="Weight decay",
     )
     train_parser.add_argument(
         "--warmup_ratio",
         type=float,
-        default=0.1,
+        default=CFG.training.warmup_ratio,
         help="Warmup ratio of total steps",
     )
     train_parser.add_argument(
         "--seed",
         type=int,
-        default=42,
+        default=CFG.training.seed,
         help="Random seed",
     )
     train_parser.add_argument(
         "--data_path",
         type=str,
-        default="dataset/raw/SROIE2019",
+        default=CFG.data.raw_data_path,
         help="Path to dataset",
     )
     train_parser.set_defaults(func=cmd_train)
@@ -417,25 +502,25 @@ Examples:
     evaluate_parser.add_argument(
         "--model_path",
         type=str,
-        default="dataset/raw/SROIE2019/layoutlm-base-uncased",
+        default=CFG.model.model_path,
         help="Path to LayoutLM model",
     )
     evaluate_parser.add_argument(
         "--processed_data_path",
         type=str,
-        default="dataset/processed",
+        default=CFG.paths.processed_data_path,
         help="Path to processed data",
     )
     evaluate_parser.add_argument(
         "--output_dir",
         type=str,
-        default="dataset/processed/evaluation",
+        default=CFG.paths.evaluation_dir,
         help="Output directory for evaluation results",
     )
     evaluate_parser.add_argument(
         "--batch_size",
         type=int,
-        default=8,
+        default=CFG.inference.batch_size,
         help="Batch size for evaluation",
     )
     evaluate_parser.add_argument(
@@ -456,13 +541,13 @@ Examples:
     full_parser.add_argument(
         "--raw_path",
         type=str,
-        default="dataset/raw/SROIE2019",
+        default=CFG.paths.raw_data_path,
         help="Path to raw dataset",
     )
     full_parser.add_argument(
         "--processed_path",
         type=str,
-        default="dataset/processed",
+        default=CFG.paths.processed_data_path,
         help="Path for processed output",
     )
     full_parser.add_argument(
@@ -475,56 +560,56 @@ Examples:
     full_parser.add_argument(
         "--model_path",
         type=str,
-        default="dataset/raw/SROIE2019/layoutlm-base-uncased",
+        default=CFG.model.model_path,
         help="Path to pretrained LayoutLM model",
     )
     full_parser.add_argument(
         "--num_epochs",
         type=int,
-        default=10,
+        default=CFG.training.num_epochs,
         help="Number of training epochs",
     )
     full_parser.add_argument(
         "--batch_size",
         type=int,
-        default=8,
+        default=CFG.training.batch_size,
         help="Batch size",
     )
     full_parser.add_argument(
         "--max_length",
         type=int,
-        default=512,
+        default=CFG.data.max_length,
         help="Maximum sequence length",
     )
     full_parser.add_argument(
         "--learning_rate",
         type=float,
-        default=5e-5,
+        default=CFG.training.learning_rate,
         help="Learning rate",
     )
     full_parser.add_argument(
         "--seed",
         type=int,
-        default=42,
+        default=CFG.training.seed,
         help="Random seed",
     )
     full_parser.add_argument(
         "--data_path",
         type=str,
-        default="dataset/raw/SROIE2019",
+        default=CFG.data.raw_data_path,
         help="Path to dataset",
     )
     full_parser.add_argument(
         "--checkpoint_dir",
         type=str,
-        default="dataset/processed/checkpoints",
+        default=CFG.training.output_dir,
         help="Directory for saving checkpoints",
     )
     # Evaluate args
     full_parser.add_argument(
         "--eval_output_dir",
         type=str,
-        default="dataset/processed/evaluation",
+        default=CFG.paths.evaluation_dir,
         help="Directory for evaluation results",
     )
     full_parser.add_argument(

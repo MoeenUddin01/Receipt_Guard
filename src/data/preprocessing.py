@@ -7,6 +7,9 @@ from typing import Dict, List, Optional, Tuple
 
 from PIL import Image
 
+# Import configuration
+from src.config import CFG
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -336,7 +339,7 @@ if __name__ == "__main__":
     import pprint
     
     # Test on first 3 train samples
-    base_path = "/home/moeen/projects/ReceiptGuard-ML/dataset/raw/SROIE2019"
+    base_path = CFG.data.raw_data_path
     train_path = Path(base_path) / "train"
     
     if train_path.exists():

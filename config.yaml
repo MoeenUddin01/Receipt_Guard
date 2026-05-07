@@ -1,0 +1,59 @@
+# ReceiptGuard-ML Configuration File
+# All paths are relative to project root
+
+project:
+  name: "ReceiptGuard-ML"
+  description: "Receipt information extraction and fraud detection using LayoutLM"
+  version: "1.0.0"
+
+paths:
+  artifacts_dir: "artifacts"
+  checkpoints_dir: "artifacts/checkpoints"
+  evaluation_dir: "artifacts/evaluation"
+  logs_dir: "artifacts/logs"
+  ledger_path: "artifacts/ledger.json"
+  raw_data_dir: "dataset/raw/SROIE2019"
+  processed_data_dir: "dataset/processed"
+  model_dir: "dataset/raw/SROIE2019/layoutlm-base-uncased"
+
+data:
+  raw_data_path: "dataset/raw/SROIE2019"
+  processed_data_path: "dataset/processed"
+  max_length: 512
+  train_split: "train"
+  test_split: "test"
+  ledger_filename: "ledger.json"
+
+model:
+  model_path: "dataset/raw/SROIE2019/layoutlm-base-uncased"
+  num_labels: 9  # O, B-COMPANY, I-COMPANY, B-DATE, I-DATE, B-ADDRESS, I-ADDRESS, B-TOTAL, I-TOTAL
+  dropout: 0.1
+  hidden_size: 768  # LayoutLM base hidden size
+
+training:
+  num_epochs: 10
+  batch_size: 8
+  learning_rate: 5e-5
+  weight_decay: 0.01
+  warmup_ratio: 0.1
+  warmup_steps: 500  # Will be calculated as warmup_ratio * total_steps
+  max_grad_norm: 1.0
+  seed: 42
+  output_dir: "dataset/processed/checkpoints"
+  checkpoint_filename: "best_model.pt"
+  final_model_filename: "final_model.pt"
+
+inference:
+  checkpoint_dir: "dataset/processed/checkpoints"
+  default_checkpoint: "best_model.pt"
+  ledger_path: "dataset/processed/inference_ledger.json"
+  max_length: 512
+  batch_size: 32  # Can use larger batch for inference
+
+kaggle:
+  input_path: "/kaggle/input"
+  working_path: "/kaggle/working"
+  receiptguard_path: "/kaggle/input/receiptguard-ml"
+  sroie2019_path: "/kaggle/input/sroie2019"
+  optimized_batch_size: 16  # Optimized for Kaggle GPU (T4 or P100)
+  optimized_epochs: 15

@@ -10,6 +10,9 @@ import torch
 from torch.utils.data import DataLoader
 from transformers import LayoutLMTokenizer, LayoutLMTokenizerFast
 
+# Import configuration
+from src.config import CFG
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -78,8 +81,8 @@ def get_tokenizer(model_path: str) -> Union[LayoutLMTokenizer, LayoutLMTokenizer
         except Exception as e:
             logger.error(f"Failed to load tokenizer from {model_path}: {e}")
             # Fallback to HuggingFace hub
-            logger.info("Falling back to microsoft/layoutlm-base-uncased from HuggingFace hub")
-            tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
+            logger.info(f"Falling back to {CFG.model.model_path} from HuggingFace hub")
+            tokenizer = LayoutLMTokenizer.from_pretrained(CFG.model.model_path)
     
     # Ensure padding token exists
     if tokenizer.pad_token is None:
@@ -194,13 +197,15 @@ class ReceiptLedger:
     duplicate submissions through fingerprint matching.
     """
     
-    def __init__(self, ledger_path: str = "dataset/processed/ledger.json"):
+    def __init__(self, ledger_path: str = None):
         """
         Initialize the receipt ledger.
         
         Args:
             ledger_path: Path to the ledger JSON file
         """
+        if ledger_path is None:
+            ledger_path = CFG.paths.ledger_path
         self.ledger_path = Path(ledger_path)
         self.ledger: Dict[str, Dict] = {}
         

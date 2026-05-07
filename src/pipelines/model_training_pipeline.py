@@ -25,6 +25,9 @@ from dataloader import get_tokenizer
 from model import ModelConfig, build_model
 from train import Trainer, get_device
 
+# Import configuration
+from src.config import CFG
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -38,22 +41,49 @@ class TrainingConfig:
     """Configuration for model training pipeline."""
 
     # Model settings
-    model_path: str = "dataset/raw/SROIE2019/layoutlm-base-uncased"
-    num_labels: int = 9  # O, B-COMPANY, I-COMPANY, B-DATE, I-DATE, B-ADDRESS, I-ADDRESS, B-TOTAL, I-TOTAL
-    dropout: float = 0.1
+    model_path: str = None
+    num_labels: int = None
+    dropout: float = None
 
     # Training settings
-    output_dir: str = "dataset/processed/checkpoints"
-    num_epochs: int = 10
-    batch_size: int = 8
-    max_length: int = 512
-    learning_rate: float = 5e-5
-    weight_decay: float = 0.01
-    warmup_ratio: float = 0.1
-    seed: int = 42
+    output_dir: str = None
+    num_epochs: int = None
+    batch_size: int = None
+    max_length: int = None
+    learning_rate: float = None
+    weight_decay: float = None
+    warmup_ratio: float = None
+    seed: int = None
 
     # Data paths
-    data_path: str = "dataset/raw/SROIE2019"
+    data_path: str = None
+    
+    def __post_init__(self):
+        """Set default values from CFG if not provided."""
+        if self.model_path is None:
+            self.model_path = CFG.model.model_path
+        if self.num_labels is None:
+            self.num_labels = CFG.model.num_labels
+        if self.dropout is None:
+            self.dropout = CFG.model.dropout
+        if self.output_dir is None:
+            self.output_dir = CFG.training.output_dir
+        if self.num_epochs is None:
+            self.num_epochs = CFG.training.num_epochs
+        if self.batch_size is None:
+            self.batch_size = CFG.training.batch_size
+        if self.max_length is None:
+            self.max_length = CFG.data.max_length
+        if self.learning_rate is None:
+            self.learning_rate = CFG.training.learning_rate
+        if self.weight_decay is None:
+            self.weight_decay = CFG.training.weight_decay
+        if self.warmup_ratio is None:
+            self.warmup_ratio = CFG.training.warmup_ratio
+        if self.seed is None:
+            self.seed = CFG.training.seed
+        if self.data_path is None:
+            self.data_path = CFG.data.raw_data_path
 
     def save_config(self, path: str) -> None:
         """Save config to JSON file."""

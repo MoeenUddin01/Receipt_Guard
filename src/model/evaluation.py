@@ -16,6 +16,9 @@ from tqdm import tqdm
 
 from src.model.model import ReceiptFieldExtractor
 
+# Import configuration
+from src.config import CFG
+
 
 # ID2LABEL mapping for evaluation
 ID2LABEL = {
@@ -208,21 +211,23 @@ def run_full_evaluation(
     dataloader: DataLoader,
     device: torch.device,
     id2label: Dict[int, str],
-    output_dir: str = "dataset/processed",
+    output_dir: str = None,
 ) -> dict:
     """
-    Run full evaluation on a dataloader.
+    Run full evaluation on test set.
     
     Args:
-        model: The model to evaluate
-        dataloader: DataLoader with evaluation data
+        model: Trained ReceiptFieldExtractor model
+        test_loader: DataLoader with test samples
         device: Device to run evaluation on
-        id2label: Mapping from label ID to label name
-        output_dir: Directory to save results
+        output_dir: Directory to save evaluation results
         
     Returns:
-        Dictionary with full metrics including NER metrics and per-receipt entities
+        Dictionary with evaluation metrics including NER metrics and per-receipt entities
     """
+    if output_dir is None:
+        output_dir = CFG.paths.evaluation_dir
+    
     model.eval()
     
     # Collect predictions
