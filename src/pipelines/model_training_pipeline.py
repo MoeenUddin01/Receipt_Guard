@@ -1,0 +1,446 @@
+"""
+Model training pipeline for ReceiptGuard-ML.
+End-to-end training orchestration for LayoutLM-based NER model.
+"""
+
+import argparse
+import json
+import logging
+import random
+import sys
+from dataclasses import dataclass, asdict, field
+from pathlib import Path
+from typing import Dict, Optional, Tuple
+
+import numpy as np
+import torch
+from torch.utils.data import DataLoader
+
+# Add parent directories to path
+sys.path.insert(0, str(Path(__file__).parent.parent / "data"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "model"))
+
+from dataset import ReceiptDataset, collate_fn, LABEL2ID
+from dataloader import get_tokenizer
+from model import ModelConfig, build_model
+from train import Trainer, get_device
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class TrainingConfig:
+    """Configuration for model training pipeline."""
+
+    # Model settings
+    model_path: str = "dataset/raw/SROIE2019/layoutlm-base-uncased"
+    num_labels: int = 9  # O, B-COMPANY, I-COMPANY, B-DATE, I-DATE, B-ADDRESS, I-ADDRESS, B-TOTAL, I-TOTAL
+    dropout: float = 0.1
+
+    # Training settings
+    output_dir: str = "dataset/processed/checkpoints"
+    num_epochs: int = 10
+    batch_size: int = 8
+    max_length: int = 512
+    learning_rate: float = 5e-5
+    weight_decay: float = 0.01
+    warmup_ratio: float = 0.1
+    seed: int = 42
+
+    # Data paths
+    data_path: str = "dataset/raw/SROIE2019"
+
+    def save_config(self, path: str) -> None:
+        """Save config to JSON file."""
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w", encoding='utf-8') as f:
+            json.dump(asdict(self), f, indent=2, ensure_ascii=False)
+        logger.info(f"Config saved to {path}")
+
+    @classmethod
+    def load_config(cls, path: str) -> "TrainingConfig":
+        """Load config from JSON file."""
+        with open(path, "r", encoding='utf-8') as f:
+            data = json.load(f)
+        return cls(**data)
+
+    def to_model_config(self) -> ModelConfig:
+        """Convert TrainingConfig to ModelConfig for model building."""
+        # Calculate warmup steps based on warmup_ratio
+        # This is an estimate; actual calculation needs dataset size
+        return ModelConfig(
+            model_path=self.model_path,
+            num_labels=self.num_labels,
+            dropout=self.dropout,
+            learning_rate=self.learning_rate,
+            weight_decay=self.weight_decay,
+            warmup_steps=0,  # Will be calculated later when dataloader is known
+            max_length=self.max_length,
+        )
+
+
+def set_seed(seed: int) -> None:
+    """
+    Set seed for reproducibility across Python, NumPy, and PyTorch.
+
+    Args:
+        seed: Random seed value
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+        # Make CUDA operations deterministic
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+    logger.info(f"Random seed set to {seed}")
+
+
+def get_dataloaders(
+    config: TrainingConfig,
+    tokenizer
+) -> Tuple[DataLoader, DataLoader]:
+    """
+    Build train and test dataloaders.
+
+    Args:
+        config: Training configuration
+        tokenizer: LayoutLM tokenizer instance
+
+    Returns:
+        Tuple of (train_loader, test_loader)
+    """
+    # Build datasets
+    logger.info("Building datasets...")
+
+    train_dataset = ReceiptDataset(
+        data_path=config.data_path,
+        split="train",
+        tokenizer_name=config.model_path,
+        max_length=config.max_length,
+    )
+
+    test_dataset = ReceiptDataset(
+        data_path=config.data_path,
+        split="test",
+        tokenizer_name=config.model_path,
+        max_length=config.max_length,
+    )
+
+    # Build dataloaders
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=config.batch_size,
+        shuffle=True,
+        collate_fn=collate_fn,
+        num_workers=0,  # Use 0 to avoid multiprocessing issues
+        pin_memory=torch.cuda.is_available(),
+    )
+
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=config.batch_size,
+        shuffle=False,
+        collate_fn=collate_fn,
+        num_workers=0,
+        pin_memory=torch.cuda.is_available(),
+    )
+
+    # Log statistics
+    logger.info(f"Train dataset: {len(train_dataset)} samples")
+    logger.info(f"Test dataset: {len(test_dataset)} samples")
+    logger.info(f"Train batches: {len(train_loader)} (batch_size={config.batch_size})")
+    logger.info(f"Test batches: {len(test_loader)} (batch_size={config.batch_size})")
+
+    return train_loader, test_loader
+
+
+def run_training_pipeline(config: TrainingConfig) -> Dict:
+    """
+    Run the complete model training pipeline.
+
+    Steps:
+    1. Setup: Set seed, create output directory, save config, detect device
+    2. Data: Load tokenizer, build dataloaders
+    3. Model: Build model, move to device, log parameter count
+    4. Train: Instantiate Trainer and run training
+    5. Report: Plot training curves and return summary
+
+    Args:
+        config: TrainingConfig with all training parameters
+
+    Returns:
+        Training summary dictionary
+    """
+    logger.info("=" * 70)
+    logger.info("Starting ReceiptGuard-ML Model Training Pipeline")
+    logger.info("=" * 70)
+
+    # =========================================================================
+    # Step 1 — Setup
+    # =========================================================================
+    logger.info("\nStep 1: Setup...")
+
+    # Set seed for reproducibility
+    set_seed(config.seed)
+
+    # Create output directory
+    output_dir = Path(config.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    logger.info(f"Output directory: {output_dir.absolute()}")
+
+    # Save config
+    config_path = output_dir / "training_config.json"
+    config.save_config(str(config_path))
+
+    # Detect device
+    device = get_device()
+    logger.info(f"Device: {device}")
+
+    # =========================================================================
+    # Step 2 — Data
+    # =========================================================================
+    logger.info("\nStep 2: Loading data...")
+
+    # Load tokenizer
+    tokenizer = get_tokenizer(config.model_path)
+    logger.info(f"Tokenizer loaded from {config.model_path}")
+
+    # Build dataloaders
+    train_loader, val_loader = get_dataloaders(config, tokenizer)
+
+    # =========================================================================
+    # Step 3 — Model
+    # =========================================================================
+    logger.info("\nStep 3: Building model...")
+
+    # Build model config with calculated warmup steps
+    model_config = config.to_model_config()
+    # Calculate warmup steps based on actual train loader size
+    total_steps = len(train_loader) * config.num_epochs
+    model_config.warmup_steps = int(total_steps * config.warmup_ratio)
+    logger.info(f"Total training steps: {total_steps}")
+    logger.info(f"Warmup steps: {model_config.warmup_steps} ({config.warmup_ratio*100:.0f}%)")
+
+    # Build model
+    model = build_model(model_config)
+
+    # Move to device
+    model = model.to(device)
+    logger.info(f"Model moved to {device}")
+
+    # Log parameter count
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    logger.info(f"Total parameters: {total_params:,}")
+    logger.info(f"Trainable parameters: {trainable_params:,}")
+
+    # =========================================================================
+    # Step 4 — Train
+    # =========================================================================
+    logger.info("\nStep 4: Training...")
+
+    # Instantiate trainer
+    trainer = Trainer(
+        model=model,
+        train_loader=train_loader,
+        val_loader=val_loader,
+        config=model_config,
+        device=device,
+        output_dir=config.output_dir,
+    )
+
+    # Run training with CUDA OOM handling
+    try:
+        trainer.train(num_epochs=config.num_epochs)
+        training_completed = True
+        oom_error = None
+    except RuntimeError as e:
+        if "out of memory" in str(e).lower() or "CUDA" in str(e):
+            logger.error("=" * 70)
+            logger.error("CUDA Out of Memory Error!")
+            logger.error("=" * 70)
+            logger.error(str(e))
+            logger.error("\nSuggestions to resolve OOM:")
+            logger.error("  1. Reduce batch_size (current: %d)", config.batch_size)
+            logger.error("  2. Reduce max_length (current: %d)", config.max_length)
+            logger.error("  3. Use a smaller model or enable gradient checkpointing")
+            logger.error("  4. Use a GPU with more memory")
+            training_completed = False
+            oom_error = str(e)
+        else:
+            raise
+
+    # =========================================================================
+    # Step 5 — Report
+    # =========================================================================
+    logger.info("\nStep 5: Generating report...")
+
+    if training_completed:
+        # Plot training curves
+        trainer.plot_training_curves()
+        logger.info("Training curves plotted")
+
+        # Build summary
+        summary = {
+            'status': 'completed',
+            'config': asdict(config),
+            'device': str(device),
+            'model_parameters': {
+                'total': total_params,
+                'trainable': trainable_params,
+            },
+            'training_history': trainer.history,
+            'best_eval_loss': trainer.best_eval_loss,
+            'best_checkpoint': str(trainer.best_checkpoint_path) if trainer.best_checkpoint_path else None,
+            'output_dir': config.output_dir,
+        }
+
+        logger.info("=" * 70)
+        logger.info("Training Pipeline Completed Successfully!")
+        logger.info("=" * 70)
+        logger.info(f"Best eval loss: {trainer.best_eval_loss:.4f}")
+        logger.info(f"Best checkpoint: {trainer.best_checkpoint_path}")
+    else:
+        summary = {
+            'status': 'failed',
+            'error': oom_error,
+            'config': asdict(config),
+            'device': str(device),
+            'suggestion': 'Reduce batch_size or max_length and retry',
+        }
+
+        logger.info("=" * 70)
+        logger.info("Training Pipeline Failed (OOM)")
+        logger.info("=" * 70)
+
+    return summary
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="ReceiptGuard-ML Model Training Pipeline"
+    )
+
+    # Model arguments
+    parser.add_argument(
+        "--model_path",
+        type=str,
+        default="dataset/raw/SROIE2019/layoutlm-base-uncased",
+        help="Path to pretrained LayoutLM model"
+    )
+    parser.add_argument(
+        "--num_labels",
+        type=int,
+        default=9,
+        help="Number of NER labels (default: 9)"
+    )
+    parser.add_argument(
+        "--dropout",
+        type=float,
+        default=0.1,
+        help="Dropout rate (default: 0.1)"
+    )
+
+    # Training arguments
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        default="dataset/processed/checkpoints",
+        help="Output directory for checkpoints"
+    )
+    parser.add_argument(
+        "--num_epochs",
+        type=int,
+        default=10,
+        help="Number of training epochs (default: 10)"
+    )
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=8,
+        help="Batch size (default: 8)"
+    )
+    parser.add_argument(
+        "--max_length",
+        type=int,
+        default=512,
+        help="Maximum sequence length (default: 512)"
+    )
+    parser.add_argument(
+        "--learning_rate",
+        type=float,
+        default=5e-5,
+        help="Learning rate (default: 5e-5)"
+    )
+    parser.add_argument(
+        "--weight_decay",
+        type=float,
+        default=0.01,
+        help="Weight decay (default: 0.01)"
+    )
+    parser.add_argument(
+        "--warmup_ratio",
+        type=float,
+        default=0.1,
+        help="Warmup ratio of total steps (default: 0.1)"
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed (default: 42)"
+    )
+
+    # Data arguments
+    parser.add_argument(
+        "--data_path",
+        type=str,
+        default="dataset/raw/SROIE2019",
+        help="Path to dataset"
+    )
+
+    # Config file option
+    parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="Path to config JSON file (overrides other arguments)"
+    )
+
+    args = parser.parse_args()
+
+    # Load from config file if provided
+    if args.config:
+        config = TrainingConfig.load_config(args.config)
+        logger.info(f"Loaded config from {args.config}")
+    else:
+        config = TrainingConfig(
+            model_path=args.model_path,
+            num_labels=args.num_labels,
+            dropout=args.dropout,
+            output_dir=args.output_dir,
+            num_epochs=args.num_epochs,
+            batch_size=args.batch_size,
+            max_length=args.max_length,
+            learning_rate=args.learning_rate,
+            weight_decay=args.weight_decay,
+            warmup_ratio=args.warmup_ratio,
+            seed=args.seed,
+            data_path=args.data_path,
+        )
+
+    # Run pipeline
+    summary = run_training_pipeline(config)
+
+    # Exit with appropriate code
+    if summary['status'] == 'completed':
+        sys.exit(0)
+    else:
+        sys.exit(1)
