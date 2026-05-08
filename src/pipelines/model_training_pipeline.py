@@ -156,19 +156,11 @@ def get_dataloaders(
     # Build datasets
     logger.info("Building datasets...")
 
-    # Handle both TrainingConfig and global CFG object
-    if hasattr(config, 'data_path'):
-        # TrainingConfig object
-        data_path = config.data_path
-        model_path = config.model_path
-        batch_size = config.batch_size
-        max_length = config.max_length
-    else:
-        # CFG object (Config instance)
-        data_path = str(CFG.resolve_path(config.data.raw_data_path))
-        model_path = config.model.model_path
-        batch_size = config.training.batch_size
-        max_length = config.data.max_length
+    # Data paths are already resolved in TrainingConfig normalization
+    data_path = config.data_path
+    model_path = config.model_path
+    batch_size = config.batch_size
+    max_length = config.max_length
 
     train_dataset = ReceiptDataset(
         data_path=data_path,
@@ -212,7 +204,29 @@ def get_dataloaders(
     return train_loader, test_loader
 
 
-def run_training_pipeline(config: TrainingConfig) -> Dict:
+def normalize_config(config: Union[TrainingConfig, Any]) -> TrainingConfig:
+    """Ensure the config object is a TrainingConfig instance with resolved paths."""
+    if isinstance(config, TrainingConfig):
+        return config
+    
+    # If it's the global CFG or a Config instance
+    return TrainingConfig(
+        model_path=config.model.model_path,
+        num_labels=config.model.num_labels,
+        dropout=config.model.dropout,
+        output_dir=str(CFG.resolve_path(config.training.output_dir)),
+        num_epochs=config.training.num_epochs,
+        batch_size=config.training.batch_size,
+        max_length=config.data.max_length,
+        learning_rate=config.training.learning_rate,
+        weight_decay=config.training.weight_decay,
+        warmup_ratio=config.training.warmup_ratio,
+        seed=config.training.seed,
+        data_path=str(CFG.resolve_path(config.data.raw_data_path))
+    )
+
+
+def run_training_pipeline(config: Union[TrainingConfig, Any]) -> Dict:
     """
     Run the complete model training pipeline.
 
@@ -233,34 +247,26 @@ def run_training_pipeline(config: TrainingConfig) -> Dict:
     logger.info("Starting ReceiptGuard-ML Model Training Pipeline")
     logger.info("=" * 70)
 
+    # Ensure we have a TrainingConfig with absolute paths
+    config = normalize_config(config)
+
     # =========================================================================
     # Step 1 — Setup
     # =========================================================================
     logger.info("\nStep 1: Setup...")
 
     # Set seed for reproducibility
-    if hasattr(config, 'seed'):
-        set_seed(config.seed)
-    else:
-        set_seed(config.training.seed)
+    set_seed(config.seed)
 
     # Create output directory
-    if hasattr(config, 'output_dir'):
-        output_dir = Path(config.output_dir)
-    else:
-        output_dir = CFG.resolve_path(config.training.output_dir)
-        
+    output_dir = Path(config.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     logger.info(f"Output directory: {output_dir.absolute()}")
 
     # Save config
     import json
     config_path = output_dir / "training_config.json"
-    
-    if hasattr(config, 'to_dict'):
-        config_data = config.to_dict()
-    else:
-        config_data = config.to_dict() # Config object also has to_dict
+    config_data = config.to_dict()
         
     with open(config_path, 'w') as f:
         json.dump(config_data, f, indent=2, default=str)
@@ -275,8 +281,8 @@ def run_training_pipeline(config: TrainingConfig) -> Dict:
     logger.info("\nStep 2: Loading data...")
 
     # Load tokenizer
-    tokenizer = get_tokenizer(config.model.model_path)
-    logger.info(f"Tokenizer loaded from {config.model.model_path}")
+    tokenizer = get_tokenizer(config.model_path)
+    logger.info(f"Tokenizer loaded from {config.model_path}")
 
     # Build dataloaders
     train_loader, val_loader = get_dataloaders(config, tokenizer)
@@ -289,20 +295,20 @@ def run_training_pipeline(config: TrainingConfig) -> Dict:
     # Build model config with calculated warmup steps
     from src.model.model import ModelConfig
     # Calculate warmup steps based on actual train loader size
-    total_steps = len(train_loader) * config.training.num_epochs
-    warmup_steps = int(total_steps * config.training.warmup_ratio)
+    total_steps = len(train_loader) * config.num_epochs
+    warmup_steps = int(total_steps * config.warmup_ratio)
     
     model_config = ModelConfig(
-        model_path=config.model.model_path,
-        num_labels=config.model.num_labels,
-        dropout=config.model.dropout,
-        learning_rate=config.training.learning_rate,
-        weight_decay=config.training.weight_decay,
+        model_path=config.model_path,
+        num_labels=config.num_labels,
+        dropout=config.dropout,
+        learning_rate=config.learning_rate,
+        weight_decay=config.weight_decay,
         warmup_steps=warmup_steps,
-        max_length=config.data.max_length
+        max_length=config.max_length
     )
     logger.info(f"Total training steps: {total_steps}")
-    logger.info(f"Warmup steps: {model_config.warmup_steps} ({config.training.warmup_ratio*100:.0f}%)")
+    logger.info(f"Warmup steps: {model_config.warmup_steps} ({config.warmup_ratio*100:.0f}%)")
 
     # Build model
     model = build_model(model_config)

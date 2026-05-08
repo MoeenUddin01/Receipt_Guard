@@ -400,7 +400,21 @@ def save_evaluation_outputs(output_dir: Path, ner_results: Dict, fraud_report: D
     logger.info(f"Fraud report saved to {fraud_file}")
 
 
-def run_evaluation_pipeline(config: EvaluationConfig) -> Dict:
+def normalize_evaluation_config(config: Union[EvaluationConfig, Any]) -> EvaluationConfig:
+    """Ensure the config object is an EvaluationConfig instance with resolved paths."""
+    if isinstance(config, EvaluationConfig):
+        return config
+    
+    return EvaluationConfig(
+        checkpoint_path=str(CFG.resolve_path(config.inference.default_checkpoint)),
+        model_path=config.model.model_path,
+        processed_data_path=str(CFG.resolve_path(config.paths.processed_data_path)),
+        output_dir=str(CFG.resolve_path(config.paths.evaluation_dir)),
+        batch_size=config.inference.batch_size
+    )
+
+
+def run_evaluation_pipeline(config: Union[EvaluationConfig, Any]) -> Dict:
     """
     Run the complete evaluation pipeline.
 
@@ -412,7 +426,7 @@ def run_evaluation_pipeline(config: EvaluationConfig) -> Dict:
     5. Return summary
 
     Args:
-        config: EvaluationConfig
+        config: EvaluationConfig or Config instance
 
     Returns:
         Summary dictionary with ner_metrics, fraud_report, output_dir
@@ -420,6 +434,10 @@ def run_evaluation_pipeline(config: EvaluationConfig) -> Dict:
     logger.info("=" * 70)
     logger.info("Starting ReceiptGuard-ML Evaluation Pipeline")
     logger.info("=" * 70)
+
+    # Ensure we have an EvaluationConfig with absolute paths
+    config = normalize_evaluation_config(config)
+
     logger.info(f"Checkpoint: {config.checkpoint_path}")
     logger.info(f"Fraud detection: {'enabled' if config.run_fraud_detection else 'disabled'}")
     logger.info(f"Output directory: {config.output_dir}")

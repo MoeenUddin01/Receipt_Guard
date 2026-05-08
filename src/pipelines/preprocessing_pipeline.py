@@ -413,7 +413,19 @@ def generate_data_report(config: PreprocessingConfig, integrity_report: Dict,
     return report_text
 
 
-def run_preprocessing_pipeline(config: PreprocessingConfig) -> Dict:
+def normalize_preprocessing_config(config: Union[PreprocessingConfig, Any]) -> PreprocessingConfig:
+    """Ensure the config object is a PreprocessingConfig instance with resolved paths."""
+    if isinstance(config, PreprocessingConfig):
+        return config
+    
+    return PreprocessingConfig(
+        raw_data_path=str(CFG.resolve_path(config.paths.raw_data_path)),
+        processed_data_path=str(CFG.resolve_path(config.paths.processed_data_path)),
+        splits=[config.data.train_split, config.data.test_split]
+    )
+
+
+def run_preprocessing_pipeline(config: Union[PreprocessingConfig, Any]) -> Dict:
     """
     Run the complete preprocessing pipeline.
 
@@ -424,7 +436,7 @@ def run_preprocessing_pipeline(config: PreprocessingConfig) -> Dict:
     4. Generate data report
 
     Args:
-        config: PreprocessingConfig with paths and settings
+        config: PreprocessingConfig or Config instance
 
     Returns:
         Summary dictionary with all statistics
@@ -432,6 +444,10 @@ def run_preprocessing_pipeline(config: PreprocessingConfig) -> Dict:
     logger.info("=" * 70)
     logger.info("Starting ReceiptGuard-ML Preprocessing Pipeline")
     logger.info("=" * 70)
+
+    # Ensure we have a PreprocessingConfig with absolute paths
+    config = normalize_preprocessing_config(config)
+
     logger.info(f"Raw data path: {config.raw_data_path}")
     logger.info(f"Processed data path: {config.processed_data_path}")
     logger.info(f"Splits: {config.splits}")
