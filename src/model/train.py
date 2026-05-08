@@ -87,7 +87,7 @@ def train_one_epoch(
         # Forward pass with mixed precision if available
         if use_amp:
             with torch.cuda.amp.autocast():
-                loss, _ = model(
+                loss, logits = model(
                     input_ids,
                     attention_mask,
                     token_type_ids,
@@ -95,7 +95,7 @@ def train_one_epoch(
                     labels,
                 )
         else:
-            loss, _ = model(
+            loss, logits = model(
                 input_ids,
                 attention_mask,
                 token_type_ids,
