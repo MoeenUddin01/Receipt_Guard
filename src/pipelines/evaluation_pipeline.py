@@ -9,7 +9,7 @@ import logging
 import sys
 from dataclasses import dataclass, asdict
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union, Any
 
 import torch
 from torch.utils.data import DataLoader
@@ -56,7 +56,7 @@ class EvaluationConfig:
         if self.model_path is None:
             self.model_path = CFG.model.model_path
         if self.processed_data_path is None:
-            self.processed_data_path = CFG.paths.processed_data_path
+            self.processed_data_path = CFG.data.processed_data_path
         if self.output_dir is None:
             self.output_dir = CFG.paths.evaluation_dir
         if self.batch_size is None:

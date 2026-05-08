@@ -10,7 +10,7 @@ import random
 import sys
 from dataclasses import dataclass, asdict, field
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Union, Any
 
 import numpy as np
 import torch
@@ -198,8 +198,8 @@ def get_dataloaders(
     # Log statistics
     logger.info(f"Train dataset: {len(train_dataset)} samples")
     logger.info(f"Test dataset: {len(test_dataset)} samples")
-    logger.info(f"Train batches: {len(train_loader)} (batch_size={config.training.batch_size})")
-    logger.info(f"Test batches: {len(test_loader)} (batch_size={config.training.batch_size})")
+    logger.info(f"Train batches: {len(train_loader)} (batch_size={config.batch_size})")
+    logger.info(f"Test batches: {len(test_loader)} (batch_size={config.batch_size})")
 
     return train_loader, test_loader
 

@@ -5,7 +5,7 @@ from collections import Counter
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union, Any
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent / "data"))
@@ -33,12 +33,12 @@ class PreprocessingConfig:
 
     def __post_init__(self):
         if self.raw_data_path is None:
-            self.raw_data_path = str(CFG.resolve_path(CFG.paths.raw_data_path))
+            self.raw_data_path = str(CFG.resolve_path(CFG.data.raw_data_path))
         else:
             self.raw_data_path = str(CFG.resolve_path(self.raw_data_path))
             
         if self.processed_data_path is None:
-            self.processed_data_path = str(CFG.resolve_path(CFG.paths.processed_data_path))
+            self.processed_data_path = str(CFG.resolve_path(CFG.data.processed_data_path))
         else:
             self.processed_data_path = str(CFG.resolve_path(self.processed_data_path))
             
