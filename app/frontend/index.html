@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ReceiptGuard - Receipt Extraction</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                    <rect width="32" height="32" rx="8" fill="#2563eb"/>
+                    <path d="M8 12h16M8 16h12M8 20h8" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                <h1>ReceiptGuard</h1>
+            </div>
+            <p class="subtitle">AI-Powered Receipt Field Extraction</p>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main">
+            <!-- Upload Section -->
+            <div class="upload-section" id="uploadSection">
+                <div class="upload-area" id="dropZone">
+                    <div class="upload-icon">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="17 8 12 3 7 8"/>
+                            <line x1="12" y1="3" x2="12" y2="15"/>
+                        </svg>
+                    </div>
+                    <h3>Upload Receipt</h3>
+                    <p>Drag & drop an image or <span class="browse">browse</span></p>
+                    <p class="formats">Supports: PNG, JPG, JPEG</p>
+                    <input type="file" id="fileInput" accept="image/png,image/jpeg,image/jpg" hidden>
+                </div>
+            </div>
+
+            <!-- Loading State -->
+            <div class="loading-state" id="loadingState" style="display: none;">
+                <div class="spinner"></div>
+                <p>Analyzing receipt with AI...</p>
+            </div>
+
+            <!-- Results Section -->
+            <div class="results-section" id="resultsSection" style="display: none;">
+                <div class="results-grid">
+                    <!-- Image Preview -->
+                    <div class="image-card">
+                        <h3>Receipt Preview</h3>
+                        <div class="image-container">
+                            <img id="previewImage" src="" alt="Receipt">
+                            <div class="bounding-boxes" id="boundingBoxes"></div>
+                        </div>
+                    </div>
+
+                    <!-- Extracted Fields -->
+                    <div class="fields-card">
+                        <h3>Extracted Fields</h3>
+                        <div class="field-list">
+                            <!-- Company -->
+                            <div class="field-item" id="companyField">
+                                <div class="field-header">
+                                    <span class="field-icon">🏢</span>
+                                    <span class="field-label">Company</span>
+                                    <span class="confidence" id="companyConfidence"></span>
+                                </div>
+                                <div class="field-value" id="companyValue">-</div>
+                                <button class="copy-btn" onclick="copyField('company')">📋</button>
+                            </div>
+
+                            <!-- Date -->
+                            <div class="field-item" id="dateField">
+                                <div class="field-header">
+                                    <span class="field-icon">📅</span>
+                                    <span class="field-label">Date</span>
+                                    <span class="confidence" id="dateConfidence"></span>
+                                </div>
+                                <div class="field-value" id="dateValue">-</div>
+                                <button class="copy-btn" onclick="copyField('date')">📋</button>
+                            </div>
+
+                            <!-- Address -->
+                            <div class="field-item" id="addressField">
+                                <div class="field-header">
+                                    <span class="field-icon">📍</span>
+                                    <span class="field-label">Address</span>
+                                    <span class="confidence" id="addressConfidence"></span>
+                                </div>
+                                <div class="field-value" id="addressValue">-</div>
+                                <button class="copy-btn" onclick="copyField('address')">📋</button>
+                            </div>
+
+                            <!-- Total -->
+                            <div class="field-item highlight" id="totalField">
+                                <div class="field-header">
+                                    <span class="field-icon">💰</span>
+                                    <span class="field-label">Total Amount</span>
+                                    <span class="confidence" id="totalConfidence"></span>
+                                </div>
+                                <div class="field-value" id="totalValue">-</div>
+                                <button class="copy-btn" onclick="copyField('total')">📋</button>
+                            </div>
+                        </div>
+
+                        <!-- Actions -->
+                        <div class="actions">
+                            <button class="btn btn-secondary" onclick="copyAll()">
+                                📋 Copy All
+                            </button>
+                            <button class="btn btn-primary" onclick="resetApp()">
+                                🔄 Process Another
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Error State -->
+            <div class="error-state" id="errorState" style="display: none;">
+                <div class="error-icon">⚠️</div>
+                <h3>Extraction Failed</h3>
+                <p id="errorMessage">Something went wrong</p>
+                <button class="btn btn-primary" onclick="resetApp()">Try Again</button>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Powered by LayoutLM • <span id="modelStatus">Checking model...</span></p>
+        </footer>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
