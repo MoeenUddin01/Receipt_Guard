@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Optional, Tuple
 
+import sys
 import torch
 import torch.nn as nn
 from torch import Tensor
@@ -80,6 +81,9 @@ class ReceiptFieldExtractor(nn.Module):
         super().__init__()
         
         # Load LayoutLM encoder (no frozen layers - full fine-tuning)
+        # Force the module into sys.modules to avoid KeyError in transformers 4.40+
+        import transformers.models.layoutlm.modeling_layoutlm
+        sys.modules['transformers.models.layoutlm.modeling_layoutlm'] = transformers.models.layoutlm.modeling_layoutlm
         self.layoutlm = LayoutLMModel.from_pretrained(model_path)
         
         # Get hidden size from config

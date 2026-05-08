@@ -30,11 +30,19 @@ def parse_box_file(path: str) -> List[Dict]:
     tokens = []
     
     try:
-        with open(path, 'r', encoding='utf-8') as f:
-            for line_num, line in enumerate(f, 1):
-                line = line.strip()
-                if not line:
-                    continue
+        # Try UTF-8 first, fall back to latin-1 if it fails
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+        except UnicodeDecodeError:
+            logger.warning(f"UTF-8 decoding failed for {path}, falling back to latin-1")
+            with open(path, 'r', encoding='latin-1') as f:
+                lines = f.readlines()
+
+        for line_num, line in enumerate(lines, 1):
+            line = line.strip()
+            if not line:
+                continue
                     
                 parts = line.split(',', 8)
                 if len(parts) < 9:
