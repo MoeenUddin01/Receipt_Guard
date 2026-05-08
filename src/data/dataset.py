@@ -212,6 +212,13 @@ class ReceiptDataset(Dataset):
         # Convert to tensors
         input_ids = encoding['input_ids'].squeeze(0)
         attention_mask = encoding['attention_mask'].squeeze(0)
+        
+        # Get token_type_ids if available, otherwise create zeros (single segment)
+        if 'token_type_ids' in encoding:
+            token_type_ids = encoding['token_type_ids'].squeeze(0)
+        else:
+            token_type_ids = torch.zeros_like(input_ids)
+        
         bbox_tensor = torch.tensor(aligned_bboxes, dtype=torch.long)
         labels_tensor = torch.tensor(aligned_labels, dtype=torch.long)
         
@@ -219,6 +226,7 @@ class ReceiptDataset(Dataset):
             'input_ids': input_ids,
             'bbox': bbox_tensor,
             'attention_mask': attention_mask,
+            'token_type_ids': token_type_ids,
             'labels': labels_tensor
         }
     
@@ -245,12 +253,14 @@ def collate_fn(batch: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tensor]:
     input_ids = torch.stack([item['input_ids'] for item in batch])
     bbox = torch.stack([item['bbox'] for item in batch])
     attention_mask = torch.stack([item['attention_mask'] for item in batch])
+    token_type_ids = torch.stack([item['token_type_ids'] for item in batch])
     labels = torch.stack([item['labels'] for item in batch])
     
     return {
         'input_ids': input_ids,
         'bbox': bbox,
         'attention_mask': attention_mask,
+        'token_type_ids': token_type_ids,
         'labels': labels
     }
 
