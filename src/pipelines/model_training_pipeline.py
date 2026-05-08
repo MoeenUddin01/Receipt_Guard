@@ -150,23 +150,23 @@ def get_dataloaders(
     logger.info("Building datasets...")
 
     train_dataset = ReceiptDataset(
-        data_path=config.data_path,
+        data_path=config.data.raw_data_path,
         split="train",
-        tokenizer_name=config.model_path,
-        max_length=config.max_length,
+        tokenizer_name=config.model.model_path,
+        max_length=config.data.max_length,
     )
 
     test_dataset = ReceiptDataset(
-        data_path=config.data_path,
+        data_path=config.data.raw_data_path,
         split="test",
-        tokenizer_name=config.model_path,
-        max_length=config.max_length,
+        tokenizer_name=config.model.model_path,
+        max_length=config.data.max_length,
     )
 
     # Build dataloaders
     train_loader = DataLoader(
         train_dataset,
-        batch_size=config.batch_size,
+        batch_size=config.training.batch_size,
         shuffle=True,
         collate_fn=collate_fn,
         num_workers=0,  # Use 0 to avoid multiprocessing issues
@@ -175,7 +175,7 @@ def get_dataloaders(
 
     test_loader = DataLoader(
         test_dataset,
-        batch_size=config.batch_size,
+        batch_size=config.training.batch_size,
         shuffle=False,
         collate_fn=collate_fn,
         num_workers=0,
@@ -185,8 +185,8 @@ def get_dataloaders(
     # Log statistics
     logger.info(f"Train dataset: {len(train_dataset)} samples")
     logger.info(f"Test dataset: {len(test_dataset)} samples")
-    logger.info(f"Train batches: {len(train_loader)} (batch_size={config.batch_size})")
-    logger.info(f"Test batches: {len(test_loader)} (batch_size={config.batch_size})")
+    logger.info(f"Train batches: {len(train_loader)} (batch_size={config.training.batch_size})")
+    logger.info(f"Test batches: {len(test_loader)} (batch_size={config.training.batch_size})")
 
     return train_loader, test_loader
 
@@ -218,16 +218,18 @@ def run_training_pipeline(config: TrainingConfig) -> Dict:
     logger.info("\nStep 1: Setup...")
 
     # Set seed for reproducibility
-    set_seed(config.seed)
+    set_seed(config.training.seed)
 
     # Create output directory
-    output_dir = Path(config.output_dir)
+    output_dir = Path(config.training.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     logger.info(f"Output directory: {output_dir.absolute()}")
 
     # Save config
+    import json
     config_path = output_dir / "training_config.json"
-    config.save_config(str(config_path))
+    with open(config_path, 'w') as f:
+        json.dump(config.to_dict(), f, indent=2, default=str)
 
     # Detect device
     device = get_device()
@@ -239,8 +241,8 @@ def run_training_pipeline(config: TrainingConfig) -> Dict:
     logger.info("\nStep 2: Loading data...")
 
     # Load tokenizer
-    tokenizer = get_tokenizer(config.model_path)
-    logger.info(f"Tokenizer loaded from {config.model_path}")
+    tokenizer = get_tokenizer(config.model.model_path)
+    logger.info(f"Tokenizer loaded from {config.model.model_path}")
 
     # Build dataloaders
     train_loader, val_loader = get_dataloaders(config, tokenizer)
@@ -251,12 +253,22 @@ def run_training_pipeline(config: TrainingConfig) -> Dict:
     logger.info("\nStep 3: Building model...")
 
     # Build model config with calculated warmup steps
-    model_config = config.to_model_config()
+    from src.model.model import ModelConfig
     # Calculate warmup steps based on actual train loader size
-    total_steps = len(train_loader) * config.num_epochs
-    model_config.warmup_steps = int(total_steps * config.warmup_ratio)
+    total_steps = len(train_loader) * config.training.num_epochs
+    warmup_steps = int(total_steps * config.training.warmup_ratio)
+    
+    model_config = ModelConfig(
+        model_path=config.model.model_path,
+        num_labels=config.model.num_labels,
+        dropout=config.model.dropout,
+        learning_rate=config.training.learning_rate,
+        weight_decay=config.training.weight_decay,
+        warmup_steps=warmup_steps,
+        max_length=config.data.max_length
+    )
     logger.info(f"Total training steps: {total_steps}")
-    logger.info(f"Warmup steps: {model_config.warmup_steps} ({config.warmup_ratio*100:.0f}%)")
+    logger.info(f"Warmup steps: {model_config.warmup_steps} ({config.training.warmup_ratio*100:.0f}%)")
 
     # Build model
     model = build_model(model_config)

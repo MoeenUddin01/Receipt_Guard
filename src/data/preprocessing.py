@@ -43,33 +43,33 @@ def parse_box_file(path: str) -> List[Dict]:
             line = line.strip()
             if not line:
                 continue
-                    
-                parts = line.split(',', 8)
-                if len(parts) < 9:
-                    logger.warning(f"Malformed line {line_num} in {path}: {line}")
-                    continue
-                    
-                try:
-                    x1, y1, x2, y2, x3, y3, x4, y4, text = parts
-                    coords = [int(x1), int(y1), int(x2), int(y2), int(x3), int(y3), int(x4), int(y4)]
-                    
-                    # Calculate normalized bbox [x_min, y_min, x_max, y_max]
-                    x_coords = [int(x1), int(x2), int(x3), int(x4)]
-                    y_coords = [int(y1), int(y2), int(y3), int(y4)]
-                    bbox_normalized = [min(x_coords), min(y_coords), max(x_coords), max(y_coords)]
-                    
-                    tokens.append({
-                        'text': text.strip(),
-                        'x1': int(x1), 'y1': int(y1),
-                        'x2': int(x2), 'y2': int(y2),
-                        'x3': int(x3), 'y3': int(y3),
-                        'x4': int(x4), 'y4': int(y4),
-                        'bbox_normalized': bbox_normalized
-                    })
-                    
-                except ValueError as e:
-                    logger.warning(f"Invalid coordinates in line {line_num} in {path}: {e}")
-                    continue
+                
+            parts = line.split(',', 8)
+            if len(parts) < 9:
+                logger.warning(f"Malformed line {line_num} in {path}: {line}")
+                continue
+                
+            try:
+                x1, y1, x2, y2, x3, y3, x4, y4, text = parts
+                coords = [int(x1), int(y1), int(x2), int(y2), int(x3), int(y3), int(x4), int(y4)]
+                
+                # Calculate normalized bbox [x_min, y_min, x_max, y_max]
+                x_coords = [int(x1), int(x2), int(x3), int(x4)]
+                y_coords = [int(y1), int(y2), int(y3), int(y4)]
+                bbox_normalized = [min(x_coords), min(y_coords), max(x_coords), max(y_coords)]
+                
+                tokens.append({
+                    'text': text.strip(),
+                    'x1': int(x1), 'y1': int(y1),
+                    'x2': int(x2), 'y2': int(y2),
+                    'x3': int(x3), 'y3': int(y3),
+                    'x4': int(x4), 'y4': int(y4),
+                    'bbox_normalized': bbox_normalized
+                })
+                
+            except ValueError as e:
+                logger.warning(f"Invalid coordinates in line {line_num} in {path}: {e}")
+                continue
                     
     except FileNotFoundError:
         logger.error(f"Box file not found: {path}")
