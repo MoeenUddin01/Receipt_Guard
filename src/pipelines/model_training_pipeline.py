@@ -59,7 +59,7 @@ class TrainingConfig:
     data_path: str = None
     
     def __post_init__(self):
-        """Set default values from CFG if not provided."""
+        """Set default values from CFG if not provided and resolve paths."""
         if self.model_path is None:
             self.model_path = CFG.model.model_path
         if self.num_labels is None:
@@ -67,7 +67,7 @@ class TrainingConfig:
         if self.dropout is None:
             self.dropout = CFG.model.dropout
         if self.output_dir is None:
-            self.output_dir = CFG.training.output_dir
+            self.output_dir = str(CFG.resolve_path(CFG.training.output_dir))
         if self.num_epochs is None:
             self.num_epochs = CFG.training.num_epochs
         if self.batch_size is None:
@@ -83,7 +83,14 @@ class TrainingConfig:
         if self.seed is None:
             self.seed = CFG.training.seed
         if self.data_path is None:
-            self.data_path = CFG.data.raw_data_path
+            self.data_path = str(CFG.resolve_path(CFG.data.raw_data_path))
+        else:
+            # Resolve if provided as relative
+            self.data_path = str(CFG.resolve_path(self.data_path))
+
+    def to_dict(self) -> Dict:
+        """Convert config to dictionary."""
+        return asdict(self)
 
     def save_config(self, path: str) -> None:
         """Save config to JSON file."""
@@ -149,24 +156,38 @@ def get_dataloaders(
     # Build datasets
     logger.info("Building datasets...")
 
+    # Handle both TrainingConfig and global CFG object
+    if hasattr(config, 'data_path'):
+        # TrainingConfig object
+        data_path = config.data_path
+        model_path = config.model_path
+        batch_size = config.batch_size
+        max_length = config.max_length
+    else:
+        # CFG object (Config instance)
+        data_path = str(CFG.resolve_path(config.data.raw_data_path))
+        model_path = config.model.model_path
+        batch_size = config.training.batch_size
+        max_length = config.data.max_length
+
     train_dataset = ReceiptDataset(
-        data_path=config.data.raw_data_path,
+        data_path=data_path,
         split="train",
-        tokenizer_name=config.model.model_path,
-        max_length=config.data.max_length,
+        tokenizer_name=model_path,
+        max_length=max_length,
     )
 
     test_dataset = ReceiptDataset(
-        data_path=config.data.raw_data_path,
+        data_path=data_path,
         split="test",
-        tokenizer_name=config.model.model_path,
-        max_length=config.data.max_length,
+        tokenizer_name=model_path,
+        max_length=max_length,
     )
 
     # Build dataloaders
     train_loader = DataLoader(
         train_dataset,
-        batch_size=config.training.batch_size,
+        batch_size=batch_size,
         shuffle=True,
         collate_fn=collate_fn,
         num_workers=0,  # Use 0 to avoid multiprocessing issues
@@ -175,7 +196,7 @@ def get_dataloaders(
 
     test_loader = DataLoader(
         test_dataset,
-        batch_size=config.training.batch_size,
+        batch_size=batch_size,
         shuffle=False,
         collate_fn=collate_fn,
         num_workers=0,
@@ -218,18 +239,31 @@ def run_training_pipeline(config: TrainingConfig) -> Dict:
     logger.info("\nStep 1: Setup...")
 
     # Set seed for reproducibility
-    set_seed(config.training.seed)
+    if hasattr(config, 'seed'):
+        set_seed(config.seed)
+    else:
+        set_seed(config.training.seed)
 
     # Create output directory
-    output_dir = Path(config.training.output_dir)
+    if hasattr(config, 'output_dir'):
+        output_dir = Path(config.output_dir)
+    else:
+        output_dir = CFG.resolve_path(config.training.output_dir)
+        
     output_dir.mkdir(parents=True, exist_ok=True)
     logger.info(f"Output directory: {output_dir.absolute()}")
 
     # Save config
     import json
     config_path = output_dir / "training_config.json"
+    
+    if hasattr(config, 'to_dict'):
+        config_data = config.to_dict()
+    else:
+        config_data = config.to_dict() # Config object also has to_dict
+        
     with open(config_path, 'w') as f:
-        json.dump(config.to_dict(), f, indent=2, default=str)
+        json.dump(config_data, f, indent=2, default=str)
 
     # Detect device
     device = get_device()

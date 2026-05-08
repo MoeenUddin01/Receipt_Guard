@@ -100,6 +100,23 @@ class Config:
         
         return value
     
+    def resolve_path(self, path_str: Union[str, Path]) -> Path:
+        """Resolve a path string to an absolute Path object.
+        
+        If the path is already absolute, returns it as a Path object.
+        If it's relative, resolves it relative to the project root.
+        
+        Args:
+            path_str: Path string or Path object
+            
+        Returns:
+            Absolute Path object
+        """
+        path = Path(path_str)
+        if path.is_absolute():
+            return path
+        return (self.project_root / path).resolve()
+    
     def get_path(self, key: str, create_dir: bool = True) -> Path:
         """Get absolute path from configuration and optionally create directory.
         
@@ -114,11 +131,7 @@ class Config:
         if path_str is None:
             raise KeyError(f"Path key not found: {key}")
         
-        # Convert to absolute path
-        if os.path.isabs(path_str):
-            path = Path(path_str)
-        else:
-            path = self.project_root / path_str
+        path = self.resolve_path(path_str)
         
         # Create directory if requested and it's a directory path
         if create_dir and not key.endswith(('.json', '.pt', '.txt', '.yaml', '.yml')):

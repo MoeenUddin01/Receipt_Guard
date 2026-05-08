@@ -33,9 +33,15 @@ class PreprocessingConfig:
 
     def __post_init__(self):
         if self.raw_data_path is None:
-            self.raw_data_path = CFG.paths.raw_data_path
+            self.raw_data_path = str(CFG.resolve_path(CFG.paths.raw_data_path))
+        else:
+            self.raw_data_path = str(CFG.resolve_path(self.raw_data_path))
+            
         if self.processed_data_path is None:
-            self.processed_data_path = CFG.paths.processed_data_path
+            self.processed_data_path = str(CFG.resolve_path(CFG.paths.processed_data_path))
+        else:
+            self.processed_data_path = str(CFG.resolve_path(self.processed_data_path))
+            
         if self.splits is None:
             self.splits = [CFG.data.train_split, CFG.data.test_split]
 

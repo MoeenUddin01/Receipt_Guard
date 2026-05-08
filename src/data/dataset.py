@@ -73,6 +73,11 @@ class ReceiptDataset(Dataset):
         # Initialize tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
         
+        # Log absolute path for debugging
+        logger.info(f"Initializing ReceiptDataset for {split} split")
+        logger.info(f"Data path (provided): {data_path}")
+        logger.info(f"Data path (absolute): {self.data_path.absolute()}")
+        
         # Load sample IDs
         self.sample_ids = self._get_sample_ids()
         
