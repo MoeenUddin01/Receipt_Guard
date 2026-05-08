@@ -10,6 +10,7 @@ from typing import Optional, Tuple
 import torch
 import torch.nn as nn
 from torch import Tensor
+import transformers.models.layoutlm.modeling_layoutlm  # noqa: F401
 from transformers import LayoutLMModel
 
 # Import configuration
@@ -31,15 +32,15 @@ class ModelConfig:
     def __post_init__(self):
         """Set default values from CFG if not provided."""
         if self.dropout is None:
-            self.dropout = CFG.model.dropout
+            self.dropout = float(CFG.model.dropout)
         if self.learning_rate is None:
-            self.learning_rate = CFG.training.learning_rate
+            self.learning_rate = float(CFG.training.learning_rate)
         if self.weight_decay is None:
-            self.weight_decay = CFG.training.weight_decay
+            self.weight_decay = float(CFG.training.weight_decay)
         if self.warmup_steps is None:
-            self.warmup_steps = CFG.training.warmup_steps
+            self.warmup_steps = int(CFG.training.warmup_steps)
         if self.max_length is None:
-            self.max_length = CFG.data.max_length
+            self.max_length = int(CFG.data.max_length)
 
     def save(self, path: str) -> None:
         """Save config to JSON file."""
