@@ -42,5 +42,5 @@ kaggle:
   working_path: "/kaggle/working"
   receiptguard_path: "/kaggle/input/receiptguard-ml"
   sroie2019_path: "/kaggle/input/sroie2019"
-  optimized_batch_size: 16
+  optimized_batch_size: 8
   optimized_epochs: 15
