@@ -82,6 +82,8 @@ def train_siamese_epoch(
     """
     model.train()
     total_loss = 0.0
+    correct_predictions = 0
+    total_predictions = 0
     all_similarities_fraud = []
     all_similarities_legit = []
     
@@ -127,11 +129,16 @@ def train_siamese_epoch(
         batch_loss = loss.item()
         total_loss += batch_loss
         
+        # Track training accuracy
+        predictions = torch.argmax(logits.detach(), dim=1)
+        correct_predictions += (predictions == labels).sum().item()
+        total_predictions += labels.size(0)
+        
         similarities_cpu = similarity_scores.detach().cpu().numpy()
         labels_cpu = labels.detach().cpu().numpy()
         
         # Free GPU memory for this batch explicitly
-        del receipt_a, receipt_b, labels, loss, logits, similarity_scores, scaled_loss
+        del receipt_a, receipt_b, labels, loss, logits, similarity_scores, scaled_loss, predictions
         
         for sim, label in zip(similarities_cpu, labels_cpu):
             if label == 1:  # Fraud
@@ -148,12 +155,14 @@ def train_siamese_epoch(
     
     # Calculate epoch metrics
     avg_loss = total_loss / len(dataloader)
+    train_accuracy = correct_predictions / total_predictions if total_predictions > 0 else 0.0
     avg_similarity_fraud = np.mean(all_similarities_fraud) if all_similarities_fraud else 0.0
     avg_similarity_legit = np.mean(all_similarities_legit) if all_similarities_legit else 0.0
     
     return {
         'epoch': epoch_num,
         'train_loss': avg_loss,
+        'train_accuracy': train_accuracy,
         'avg_similarity_fraud': avg_similarity_fraud,
         'avg_similarity_legit': avg_similarity_legit
     }
@@ -327,6 +336,7 @@ class SiameseTrainer:
             # Log metrics
             self.writer.add_scalar('Loss/Train', train_metrics['train_loss'], epoch)
             self.writer.add_scalar('Loss/Val', eval_metrics['eval_loss'], epoch)
+            self.writer.add_scalar('Accuracy/Train', train_metrics['train_accuracy'], epoch)
             self.writer.add_scalar('Accuracy/Val', eval_metrics['accuracy'], epoch)
             self.writer.add_scalar('Threshold/Best', best_threshold, epoch)
             self.writer.add_scalar('Similarity/Fraud', train_metrics['avg_similarity_fraud'], epoch)
@@ -335,6 +345,7 @@ class SiameseTrainer:
             
             # Print epoch summary
             print(f"Train Loss: {train_metrics['train_loss']:.6f}")
+            print(f"Train Accuracy: {train_metrics['train_accuracy']:.4f}")
             print(f"Val Loss: {eval_metrics['eval_loss']:.6f}")
             print(f"Val Accuracy: {eval_metrics['accuracy']:.4f}")
             print(f"Best Threshold: {best_threshold:.3f}")
