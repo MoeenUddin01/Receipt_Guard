@@ -9,5 +9,7 @@ wheels/
 # Virtual environments
 .venv
 
-# Dataset (large files, download separately)
+# Dataset and Artifacts (large files, download separately)
 dataset/
+artifacts/
+scratch/

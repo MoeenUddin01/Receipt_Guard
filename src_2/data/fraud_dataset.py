@@ -266,7 +266,7 @@ class SROIEPairDataset(Dataset):
         bboxes = receipt.get('bboxes', [])
         
         # Get text from tokens
-        texts = [t.get('text', '') for t in tokens]
+        texts = tokens
         
         # Tokenize
         encoding = self.tokenizer(

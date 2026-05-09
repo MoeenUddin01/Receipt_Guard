@@ -1,27 +1,52 @@
 # ReceiptGuard-ML
 
-A PyTorch-based receipt information extraction system using LayoutLM and the SROIE2019 dataset with centralized configuration management.
+A comprehensive two-model receipt processing system using LayoutLM and Siamese networks for information extraction and fraud detection.
 
 ## Overview
 
-ReceiptGuard-ML is a machine learning system that extracts key information from scanned receipts using Microsoft's LayoutLM model. The system processes receipt images to identify and extract company names, dates, addresses, and total amounts through named entity recognition (NER) with built-in fraud detection capabilities.
+ReceiptGuard-ML is a dual-model machine learning system that processes scanned receipts through two stages:
+
+**Model 1 (NER)**: Extracts key information (company, date, address, total) using Microsoft's LayoutLM with named entity recognition.
+
+**Model 2 (Siamese)**: Detects fraud by comparing receipts against stored examples using similarity learning and fingerprint-based deduplication.
+
+The system combines advanced document understanding with fraud detection to provide comprehensive receipt validation and analysis.
 
 ## Features
 
-- **Receipt Information Extraction**: Extracts company, date, address, and total amount from receipts
-- **Fraud Detection**: Fingerprint-based deduplication engine to detect duplicate receipt submissions
-- **LayoutLM Integration**: Leverages pre-trained LayoutLM for document understanding with spatial awareness
-- **SROIE2019 Dataset**: Built on the benchmark receipt OCR dataset
+### Model 1 - Receipt Information Extraction
+- **LayoutLM-based NER**: Extracts company, date, address, and total from receipts
+- **Spatial Awareness**: Leverages bounding box information for better entity recognition
+- **BIO Labeling**: Uses Begin-Inside-Outside scheme for multi-token entities
+- **Entity Normalization**: Standardizes dates, amounts, and company names
+
+### Model 2 - Siamese Fraud Detection
+- **Siamese Network**: Compares receipts using shared LayoutLM encoder
+- **Similarity Learning**: Learns cosine similarity between receipt pairs
+- **Fraud Types**: Detects exact duplicates, date tampering, total tampering, company typos
+- **Threshold Optimization**: Automatically finds optimal similarity threshold for fraud detection
+- **Per-Type Analysis**: Detailed performance metrics by fraud type
+
+### System Features
+- **Receipt Ledger**: Persistent storage of processed receipts with fingerprinting
+- **Rule Engine**: Combines similarity scores with fingerprint matching for verdicts
+- **Dual-Model Pipeline**: End-to-end processing from image to fraud verdict
+- **Comprehensive Evaluation**: ROC curves, confusion matrices, per-type metrics
+- **Mixed Precision Training**: Faster training with automatic mixed precision
+- **TensorBoard Integration**: Live training monitoring and visualization
+
+### Infrastructure
+- **SROIE2019 Dataset**: Built on benchmark receipt OCR dataset
 - **Centralized Configuration**: YAML-based configuration system with CLI override support
-- **CLI Interface**: Complete command-line interface for preprocessing, training, and evaluation
+- **CLI Interface**: Complete command-line interface for both models
 - **Kaggle Support**: Runtime configuration overrides for notebook environments
-- **Comprehensive Preprocessing**: Robust data pipeline with bbox normalization and BIO labeling
-- **PyTorch Dataset**: Ready-to-use dataset class with proper tensor handling
+- **Robust Preprocessing**: Data pipeline with bbox normalization and synthetic fraud generation
+- **PyTorch Datasets**: Ready-to-use datasets for both models
 - **Error Handling**: Graceful handling of malformed data and missing files
 
 ## Current Implementation Status
 
-✅ **Completed Modules:**
+✅ **Model 1 - Receipt Information Extraction:**
 - **Configuration System**
   - Centralized YAML configuration (`config.yaml`)
   - Global CFG object with attribute access
@@ -41,7 +66,6 @@ ReceiptGuard-ML is a machine learning system that extracts key information from 
   - Entity normalization and BIO labeling
   - Bounding box normalization for LayoutLM
   - Tokenization and bbox alignment
-  - Fraud detection through fingerprint-based deduplication
   
 - **Model Layer**
   - LayoutLM-based NER model (`src/model/model.py`)
@@ -62,6 +86,32 @@ ReceiptGuard-ML is a machine learning system that extracts key information from 
   - OCR integration with pytesseract
   - Batch inference support
   - Duplicate detection integration
+
+✅ **Model 2 - Siamese Fraud Detection:**
+- **Data Layer (`src_2/data/`)**
+  - Fraud dataset generation (`fraud_dataset.py`) with synthetic tampering
+  - Siamese dataloaders (`dataloader.py`) with custom collate functions
+  - Class weight computation for imbalanced fraud detection
+
+- **Model Layer (`src_2/model/`)**
+  - Siamese similarity model (`siamese_model.py`) with shared LayoutLM encoder
+  - Training utilities (`train.py`) with mixed precision and similarity diagnostics
+  - Comprehensive evaluation (`evaluation.py`) with ROC curves and per-type metrics
+  - Checkpoint management with threshold optimization
+
+- **Pipeline Layer (`src_2/pipelines/`)**
+  - Fraud data pipeline (`fraud_data_pipeline.py`) for pair generation
+  - Siamese training pipeline (`siamese_training_pipeline.py`) with full orchestration
+  - Evaluation pipeline (`siamese_eval_pipeline.py`) for trained models
+
+- **Inference Layer (`src_2/inference/`)**
+  - Combined fraud predictor (`fraud_predictor.py`) using both models + ledger
+  - Rule engine for verdict determination (FRAUD/SUSPICIOUS/LEGITIMATE)
+  - Receipt ledger integration for persistent fingerprinting
+
+- **Testing (`src_2/tests/`)**
+  - Comprehensive unit tests (`test_siamese.py`) for all components
+  - Self-contained tests with mocking, no dataset dependencies
 
 ## Installation
 
@@ -103,9 +153,9 @@ dataset/raw/SROIE2019/
 
 ## Usage
 
-### Command Line Interface
+### Model 1 - Receipt Information Extraction
 
-The main entry point is `main.py` which provides a complete CLI for all operations:
+The main entry point is `main.py` which provides a complete CLI for NER operations:
 
 ```bash
 # Full pipeline (preprocess → train → evaluate)
@@ -119,6 +169,55 @@ python main.py evaluate --checkpoint_path artifacts/checkpoints/best_model.pt
 # Get help
 python main.py --help
 python main.py train --help
+```
+
+### Model 2 - Siamese Fraud Detection
+
+Separate CLI for fraud detection training and evaluation:
+
+```bash
+# Generate fraud pairs for training
+python -m src_2.pipelines.fraud_data_pipeline \
+  --fraud-ratio 0.5 --output-path artifacts/siamese
+
+# Train Siamese model
+python -m src_2.pipelines.siamese_training_pipeline \
+  --num-epochs 10 --batch-size 8 \
+  --model-path dataset/raw/SROIE2019/layoutlm-base-uncased
+
+# Evaluate trained model
+python -m src_2.pipelines.siamese_eval_pipeline \
+  --checkpoint-path artifacts/siamese/checkpoints/best_model.pth \
+  --model-path dataset/raw/SROIE2019/layoutlm-base-uncased
+
+# Run inference on new receipt
+python -m src_2.inference.fraud_predictor \
+  --image receipt.jpg \
+  --model1 artifacts/checkpoints/best_model.pt \
+  --model2 artifacts/siamese/checkpoints/best_model.pth
+```
+
+### Combined Inference
+
+The final fraud predictor combines both models:
+
+```python
+from src_2.inference.fraud_predictor import ReceiptGuardPredictor
+
+# Initialize predictor with both models
+predictor = ReceiptGuardPredictor(
+    model1_checkpoint="artifacts/checkpoints/best_model.pt",
+    model2_checkpoint="artifacts/siamese/checkpoints/best_model.pth"
+)
+
+# Process receipt image
+result = predictor.predict_from_image("receipt.jpg")
+
+print(f"Verdict: {result['verdict']}")
+print(f"Confidence: {result['confidence']:.3f}")
+print(f"Company: {result['company']}")
+print(f"Date: {result['date']}")
+print(f"Total: {result['total']}")
 ```
 
 ### Configuration System
@@ -343,7 +442,7 @@ python main.py --help
 ```
 ReceiptGuard-ML/
 ├── config.yaml                    # Centralized configuration file
-├── src/
+├── src/                          # Model 1 - Receipt Information Extraction
 │   ├── config.py                  # Configuration management system
 │   ├── main.py                    # CLI entry point
 │   ├── data/                      # Data loading and preprocessing
@@ -360,11 +459,32 @@ ReceiptGuard-ML/
 │   │   └── evaluation_pipeline.py
 │   └── inference/                 # Inference system
 │       └── predictor.py           # Receipt predictor with OCR and deduplication
+├── src_2/                        # Model 2 - Siamese Fraud Detection
+│   ├── data/                      # Fraud data generation and loading
+│   │   ├── fraud_dataset.py       # Synthetic fraud pair generation
+│   │   └── dataloader.py          # Siamese batching utilities
+│   ├── model/                     # Siamese model and training
+│   │   ├── siamese_model.py      # Siamese similarity model
+│   │   ├── train.py               # Training loop with similarity diagnostics
+│   │   └── evaluation.py          # Fraud detection evaluation metrics
+│   ├── pipelines/                 # End-to-end pipelines
+│   │   ├── fraud_data_pipeline.py    # Generate training pairs
+│   │   ├── siamese_training_pipeline.py  # Train Siamese model
+│   │   └── siamese_eval_pipeline.py      # Evaluate trained model
+│   ├── inference/                 # Combined inference system
+│   │   └── fraud_predictor.py    # Final fraud predictor with both models
+│   ├── receipt_ledger.py          # Persistent receipt storage
+│   └── tests/                     # Unit tests
+│       ├── __init__.py
+│       └── test_siamese.py        # Comprehensive test suite
 ├── artifacts/                     # Generated artifacts (gitignored)
-│   ├── checkpoints/               # Model checkpoints
-│   ├── evaluation/                # Evaluation results
-│   ├── logs/                      # Training logs
-│   └── ledger.json                # Fraud detection ledger
+│   ├── checkpoints/               # Model 1 checkpoints
+│   ├── siamese/                  # Model 2 artifacts
+│   │   ├── checkpoints/           # Siamese model checkpoints
+│   │   ├── evaluation/            # Evaluation results
+│   │   └── ledger.json           # Receipt ledger
+│   ├── evaluation/                # Model 1 evaluation results
+│   └── logs/                      # Training logs
 ├── dataset/                       # Dataset directory (gitignored)
 │   ├── raw/                       # Raw SROIE2019 data
 │   └── processed/                 # Processed data cache
@@ -615,6 +735,7 @@ pytest
 
 ## Future Development
 
+### Model 1 - Receipt Information Extraction
 - [x] Complete LayoutLM model wrapper
 - [x] Implement training pipeline with proper loss functions
 - [x] Add evaluation metrics (F1, precision, recall)
@@ -623,11 +744,32 @@ pytest
 - [x] Create centralized configuration system
 - [x] Implement CLI interface
 - [x] Add inference pipeline for new receipts
-- [ ] Add comprehensive test suite
+
+### Model 2 - Siamese Fraud Detection
+- [x] Implement Siamese similarity model with shared LayoutLM encoder
+- [x] Create synthetic fraud pair generation (date/total/company tampering)
+- [x] Implement custom collate functions for Siamese batching
+- [x] Add mixed precision training with similarity diagnostics
+- [x] Create comprehensive evaluation with per-fraud-type metrics
+- [x] Implement threshold optimization for fraud detection
+- [x] Build combined inference engine with rule engine
+- [x] Add receipt ledger with fingerprint-based deduplication
+- [x] Create comprehensive test suite
+
+### System Integration
+- [x] End-to-end pipeline from image to fraud verdict
+- [x] Dual-model CLI interfaces
+- [x] Persistent ledger management
+- [x] Comprehensive documentation and examples
+
+### Future Enhancements
+- [ ] Add comprehensive test suite for Model 1
 - [ ] Create web interface for receipt processing
 - [ ] Export models to ONNX for production deployment
 - [ ] Add model quantization for mobile deployment
 - [ ] Implement multi-language support
+- [ ] Real-time fraud detection API
+- [ ] Advanced fraud pattern analysis
 
 ## License
 

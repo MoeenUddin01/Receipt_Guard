@@ -1,0 +1,46 @@
+# ReceiptGuard-ML Siamese Model Configuration (Model 2)
+# All paths are relative to project root
+
+project:
+  name: "ReceiptGuard-ML-Siamese"
+  description: "Receipt fraud detection using Siamese LayoutLM"
+  version: "1.0.0"
+
+paths:
+  artifacts_dir: "artifacts/siamese"
+  checkpoints_dir: "artifacts/siamese/checkpoints"
+  evaluation_dir: "artifacts/siamese/evaluation"
+  logs_dir: "artifacts/siamese/logs"
+  plots_dir: "artifacts/siamese/plots"
+  processed_data_dir: "dataset/processed"
+  model_dir: "dataset/raw/SROIE2019/layoutlm-base-uncased"
+
+data:
+  processed_data_path: "dataset/processed"
+  max_length: 512
+  train_split: "train"
+  test_split: "test"
+  fraud_ratio: 0.5
+
+model:
+  model_path: "dataset/raw/SROIE2019/layoutlm-base-uncased"
+  projection_dim: 256
+  dropout: 0.1
+
+training:
+  num_epochs: 15
+  batch_size: 8
+  learning_rate: 2e-5
+  weight_decay: 0.01
+  warmup_ratio: 0.1
+  seed: 42
+  output_dir: "artifacts/siamese/checkpoints"
+  checkpoint_filename: "best_model.pth"
+
+kaggle:
+  input_path: "/kaggle/input"
+  working_path: "/kaggle/working"
+  receiptguard_path: "/kaggle/input/receiptguard-ml"
+  sroie2019_path: "/kaggle/input/sroie2019"
+  optimized_batch_size: 16
+  optimized_epochs: 15
