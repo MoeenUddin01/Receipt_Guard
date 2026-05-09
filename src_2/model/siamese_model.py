@@ -81,6 +81,10 @@ class SiameseSimilarityModel(nn.Module):
         
         # Load shared LayoutLM model
         self.layoutlm = LayoutLMModel.from_pretrained(model_path)
+        
+        # Enable gradient checkpointing to save VRAM
+        self.layoutlm.gradient_checkpointing_enable()
+        
         hidden_size = self.layoutlm.config.hidden_size
         
         # Dropout layer
