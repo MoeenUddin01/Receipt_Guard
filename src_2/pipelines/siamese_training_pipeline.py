@@ -6,6 +6,7 @@ including data loading, model setup, training, and final diagnostics.
 """
 
 import argparse
+import gc
 import json
 import os
 import random
@@ -146,6 +147,13 @@ def run_siamese_training_pipeline(config: SiameseTrainingConfig) -> Dict:
     device = detect_device()
     print(f"✓ Device detected: {device}")
     
+    # Set PyTorch memory allocator config for CUDA
+    if device.type == 'cuda':
+        os.environ['PYTORCH_ALLOC_CONF'] = 'expandable_segments:True'
+        torch.cuda.empty_cache()
+        gc.collect()
+        print(f"✓ PYTORCH_ALLOC_CONF set to expandable_segments:True")
+    
     # Step 2: Data
     print(f"\n{'─' * 60}")
     print("STEP 2: DATA LOADING")
@@ -193,8 +201,37 @@ def run_siamese_training_pipeline(config: SiameseTrainingConfig) -> Dict:
     # Build model
     print(f"Building Siamese model...")
     model = build_siamese_model(siamese_config)
+    
+    # Freeze early LayoutLM encoder layers to reduce GPU memory
+    # Keep the last 6 layers trainable (layers 6-11)
+    freeze_count = 0
+    for name, param in model.layoutlm.named_parameters():
+        if 'embeddings' in name:
+            param.requires_grad = False
+            freeze_count += 1
+        elif 'encoder.layer.' in name:
+            layer_num = int(name.split('encoder.layer.')[1].split('.')[0])
+            if layer_num < 6:
+                param.requires_grad = False
+                freeze_count += 1
+    
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    total_params = sum(p.numel() for p in model.parameters())
+    print(f"✓ Froze {freeze_count} parameter groups (embeddings + layers 0-5)")
+    print(f"  Trainable: {trainable_params:,} / {total_params:,} ({100*trainable_params/total_params:.1f}%)")
+    
+    # Clear memory before moving model to GPU
+    gc.collect()
+    if device.type == 'cuda':
+        torch.cuda.empty_cache()
+    
     model = model.to(device)
     print(f"✓ Model moved to {device}")
+    
+    if device.type == 'cuda':
+        allocated = torch.cuda.memory_allocated() / 1024**3
+        reserved = torch.cuda.memory_reserved() / 1024**3
+        print(f"  GPU memory: {allocated:.2f} GiB allocated, {reserved:.2f} GiB reserved")
     
     # Step 4: Training
     print(f"\n{'─' * 60}")

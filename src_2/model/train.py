@@ -6,6 +6,7 @@ threshold optimization, mixed precision training, and comprehensive
 logging with similarity distribution analysis.
 """
 
+import gc
 import os
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -15,7 +16,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from sklearn.metrics import f1_score, accuracy_score
-from torch.cuda.amp import GradScaler, autocast
+from torch.amp import GradScaler, autocast
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
@@ -57,10 +58,13 @@ def train_siamese_epoch(
     optimizer: torch.optim.Optimizer,
     scheduler: torch.optim.lr_scheduler._LRScheduler,
     device: torch.device,
-    epoch_num: int
+    epoch_num: int,
+    scaler: GradScaler = None,
+    gradient_accumulation_steps: int = 1
 ) -> Dict:
     """
-    One training epoch with mixed precision and gradient clipping.
+    One training epoch with mixed precision, gradient clipping, and
+    gradient accumulation for memory-constrained GPUs.
     
     Args:
         model: SiameseSimilarityModel instance
@@ -69,6 +73,9 @@ def train_siamese_epoch(
         scheduler: Learning rate scheduler
         device: Device to train on
         epoch_num: Current epoch number
+        scaler: Optional GradScaler instance (reused across epochs)
+        gradient_accumulation_steps: Number of mini-batches to accumulate
+            before performing an optimizer step (default 1 = no accumulation)
         
     Returns:
         Dictionary with training metrics
@@ -78,44 +85,53 @@ def train_siamese_epoch(
     all_similarities_fraud = []
     all_similarities_legit = []
     
-    # Setup mixed precision scaler
-    scaler = GradScaler() if device.type == 'cuda' else None
-    
     progress_bar = tqdm(dataloader, desc=f"Epoch {epoch_num}")
     
+    # Zero gradients at the start
+    optimizer.zero_grad(set_to_none=True)
+    
     for batch_idx, batch in enumerate(progress_bar):
-        # Move batch to device
-        receipt_a = {k: v.to(device) for k, v in batch['receipt_a'].items()}
-        receipt_b = {k: v.to(device) for k, v in batch['receipt_b'].items()}
-        labels = batch['labels'].to(device)
-        
-        optimizer.zero_grad()
+        # Move batch to device (non_blocking for pin_memory overlap)
+        receipt_a = {k: v.to(device, non_blocking=True) for k, v in batch['receipt_a'].items()}
+        receipt_b = {k: v.to(device, non_blocking=True) for k, v in batch['receipt_b'].items()}
+        labels = batch['labels'].to(device, non_blocking=True)
         
         # Forward pass with mixed precision
         if scaler is not None:
-            with autocast():
+            with autocast('cuda'):
                 loss, logits, similarity_scores = model(receipt_a, receipt_b, labels)
             
-            # Backward pass with gradient scaling
-            scaler.scale(loss).backward()
-            scaler.unscale_(optimizer)
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-            scaler.step(optimizer)
-            scaler.update()
+            # Scale loss by accumulation steps
+            scaled_loss = loss / gradient_accumulation_steps
+            scaler.scale(scaled_loss).backward()
         else:
             loss, logits, similarity_scores = model(receipt_a, receipt_b, labels)
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-            optimizer.step()
+            scaled_loss = loss / gradient_accumulation_steps
+            scaled_loss.backward()
         
-        scheduler.step()
+        # Optimizer step at accumulation boundary or end of epoch
+        if (batch_idx + 1) % gradient_accumulation_steps == 0 or (batch_idx + 1) == len(dataloader):
+            if scaler is not None:
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                optimizer.step()
+            
+            scheduler.step()
+            optimizer.zero_grad(set_to_none=True)
         
-        # Accumulate metrics
-        total_loss += loss.item()
+        # Accumulate metrics (move to CPU immediately to free GPU memory)
+        batch_loss = loss.item()
+        total_loss += batch_loss
         
-        # Separate similarities by label for diagnostics
         similarities_cpu = similarity_scores.detach().cpu().numpy()
         labels_cpu = labels.detach().cpu().numpy()
+        
+        # Free GPU memory for this batch explicitly
+        del receipt_a, receipt_b, labels, loss, logits, similarity_scores, scaled_loss
         
         for sim, label in zip(similarities_cpu, labels_cpu):
             if label == 1:  # Fraud
@@ -125,7 +141,7 @@ def train_siamese_epoch(
         
         # Update progress bar
         progress_bar.set_postfix({
-            'loss': f'{loss.item():.4f}',
+            'loss': f'{batch_loss:.4f}',
             'avg_sim_fraud': f'{np.mean(all_similarities_fraud[-50:]) if all_similarities_fraud else 0:.3f}',
             'avg_sim_legit': f'{np.mean(all_similarities_legit[-50:]) if all_similarities_legit else 0:.3f}'
         })
@@ -168,12 +184,16 @@ def evaluate_siamese(
     with torch.no_grad():
         for batch in tqdm(dataloader, desc="Evaluating"):
             # Move batch to device
-            receipt_a = {k: v.to(device) for k, v in batch['receipt_a'].items()}
-            receipt_b = {k: v.to(device) for k, v in batch['receipt_b'].items()}
-            labels = batch['labels'].to(device)
+            receipt_a = {k: v.to(device, non_blocking=True) for k, v in batch['receipt_a'].items()}
+            receipt_b = {k: v.to(device, non_blocking=True) for k, v in batch['receipt_b'].items()}
+            labels = batch['labels'].to(device, non_blocking=True)
             
-            # Forward pass
-            loss, logits, similarity_scores = model(receipt_a, receipt_b, labels)
+            # Forward pass with mixed precision for memory efficiency
+            if device.type == 'cuda':
+                with autocast('cuda'):
+                    loss, logits, similarity_scores = model(receipt_a, receipt_b, labels)
+            else:
+                loss, logits, similarity_scores = model(receipt_a, receipt_b, labels)
             
             # Accumulate metrics
             total_loss += loss.item()
@@ -185,6 +205,9 @@ def evaluate_siamese(
             all_similarities.extend(similarity_scores.cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
             all_predictions.extend(predictions.cpu().numpy())
+            
+            # Free GPU memory
+            del receipt_a, receipt_b, labels, loss, logits, similarity_scores, predictions
     
     # Calculate metrics
     avg_loss = total_loss / len(dataloader)
@@ -273,6 +296,9 @@ class SiameseTrainer:
             pct_start=self.config.warmup_ratio
         )
         
+        # Create GradScaler once and reuse across epochs
+        scaler = GradScaler('cuda') if self.device.type == 'cuda' else None
+        
         for epoch in range(1, num_epochs + 1):
             print(f"\n{'='*60}")
             print(f"Epoch {epoch}/{num_epochs}")
@@ -280,8 +306,14 @@ class SiameseTrainer:
             
             # Training
             train_metrics = train_siamese_epoch(
-                self.model, self.train_loader, optimizer, scheduler, self.device, epoch
+                self.model, self.train_loader, optimizer, scheduler, self.device, epoch,
+                scaler=scaler
             )
+            
+            # Free training activations before evaluation
+            gc.collect()
+            if self.device.type == 'cuda':
+                torch.cuda.empty_cache()
             
             # Evaluation
             eval_metrics = evaluate_siamese(self.model, self.val_loader, self.device)

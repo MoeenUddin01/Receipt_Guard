@@ -132,7 +132,7 @@ def get_siamese_dataloaders(
         dataset=train_dataset,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=2,
+        num_workers=0,
         pin_memory=True,
         collate_fn=collate_pairs
     )
@@ -142,7 +142,7 @@ def get_siamese_dataloaders(
         dataset=test_dataset,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=2,
+        num_workers=0,
         pin_memory=True,
         collate_fn=collate_pairs
     )
