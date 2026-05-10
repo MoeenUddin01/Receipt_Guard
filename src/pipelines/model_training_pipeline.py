@@ -310,8 +310,40 @@ def run_training_pipeline(config: Union[TrainingConfig, Any]) -> Dict:
     logger.info(f"Total training steps: {total_steps}")
     logger.info(f"Warmup steps: {model_config.warmup_steps} ({config.warmup_ratio*100:.0f}%)")
 
+    # Compute class weights from training data
+    logger.info("Computing class weights...")
+    try:
+        from sklearn.utils.class_weight import compute_class_weight
+        
+        # Collect all labels from training dataset
+        all_labels = []
+        for sample in train_dataset:
+            labels = sample["labels"]
+            all_labels.extend(labels[labels != -100].tolist())
+        
+        # Compute class weights
+        weights = compute_class_weight(
+            class_weight="balanced",
+            classes=list(range(config.num_labels)),
+            y=all_labels
+        )
+        class_weights = torch.tensor(weights, dtype=torch.float)
+        class_weights = class_weights.to(device)
+        
+        logger.info("Class weights computed:")
+        label_names = ['O', 'B-COMPANY', 'I-COMPANY', 'B-DATE', 'I-DATE', 'B-ADDRESS', 'I-ADDRESS', 'B-TOTAL', 'I-TOTAL']
+        for i, (name, weight) in enumerate(zip(label_names, weights)):
+            logger.info(f"  {name}: {weight:.4f}")
+            
+    except ImportError:
+        logger.warning("sklearn not available, using no class weights")
+        class_weights = None
+    except Exception as e:
+        logger.warning(f"Failed to compute class weights: {e}")
+        class_weights = None
+
     # Build model
-    model = build_model(model_config)
+    model = build_model(model_config, class_weights=class_weights)
 
     # Move to device
     model = model.to(device)

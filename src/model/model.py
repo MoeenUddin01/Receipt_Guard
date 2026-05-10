@@ -67,7 +67,7 @@ class ReceiptFieldExtractor(nn.Module):
     - Linear classifier head: hidden_size -> num_labels
     """
 
-    def __init__(self, model_path: str, num_labels: int, dropout: float = None):
+    def __init__(self, model_path: str, num_labels: int, dropout: float = None, class_weights: torch.Tensor = None):
         """
         Initialize the receipt field extractor.
         
@@ -75,6 +75,7 @@ class ReceiptFieldExtractor(nn.Module):
             model_path: Path to pretrained LayoutLM weights
             num_labels: Number of NER labels (including O tag)
             dropout: Dropout probability for classifier
+            class_weights: Optional tensor of class weights for loss function
         """
         if dropout is None:
             dropout = CFG.model.dropout
@@ -100,6 +101,7 @@ class ReceiptFieldExtractor(nn.Module):
         nn.init.zeros_(self.classifier.bias)
         
         self.num_labels = num_labels
+        self.class_weights = class_weights
 
     def forward(
         self,
@@ -142,7 +144,11 @@ class ReceiptFieldExtractor(nn.Module):
         # Compute loss if labels provided
         loss = None
         if labels is not None:
-            loss_fct = nn.CrossEntropyLoss(ignore_index=-100)
+            # Use class weights if provided
+            if self.class_weights is not None:
+                loss_fct = nn.CrossEntropyLoss(weight=self.class_weights, ignore_index=-100)
+            else:
+                loss_fct = nn.CrossEntropyLoss(ignore_index=-100)
             # Flatten for loss computation: [batch_size * seq_len, num_labels]
             loss = loss_fct(
                 logits.view(-1, self.num_labels),
@@ -155,35 +161,39 @@ class ReceiptFieldExtractor(nn.Module):
     def get_predictions(
         self, logits: Tensor, attention_mask: Tensor
     ) -> list[list[int]]:
-        """
-        Get predicted label IDs for non-padding tokens.
-        
-        Args:
-            logits: Model output logits [batch_size, seq_len, num_labels]
-            attention_mask: Attention mask [batch_size, seq_len]
-            
-        Returns:
-            List of predicted label ID lists (one per sample, excluding padding)
-        """
-        # Get predicted IDs: [batch_size, seq_len]
         pred_ids = torch.argmax(logits, dim=-1)
-        
         predictions = []
         for i in range(logits.size(0)):
-            # Get valid token positions (attention_mask == 1)
             valid_mask = attention_mask[i] == 1
             valid_preds = pred_ids[i][valid_mask].cpu().tolist()
             predictions.append(valid_preds)
-        
         return predictions
 
+    @classmethod
+    def load_from_checkpoint(
+        cls,
+        checkpoint_path: str,
+        model_path: str = None,
+        num_labels: int = 9,
+    ) -> "ReceiptFieldExtractor":
+        checkpoint = torch.load(checkpoint_path, map_location="cpu")
+        if model_path is None:
+            model_path = checkpoint.get("model_path", "microsoft/layoutlm-base-uncased")
+        model = cls(model_path=model_path, num_labels=num_labels)
+        model.load_state_dict(checkpoint["model_state_dict"])
+        epoch = checkpoint.get("epoch", 0)
+        loss = checkpoint.get("loss", float("inf"))
+        print(f"Model loaded from {checkpoint_path} (epoch {epoch}, loss {loss:.4f})")
+        return model
 
-def build_model(config: ModelConfig) -> ReceiptFieldExtractor:
+
+def build_model(config: ModelConfig, class_weights: torch.Tensor = None) -> ReceiptFieldExtractor:
     """
     Instantiate a ReceiptFieldExtractor from config.
     
     Args:
         config: ModelConfig with model parameters
+        class_weights: Optional tensor of class weights for loss function
         
     Returns:
         Initialized ReceiptFieldExtractor model
@@ -192,6 +202,7 @@ def build_model(config: ModelConfig) -> ReceiptFieldExtractor:
         model_path=config.model_path,
         num_labels=config.num_labels,
         dropout=config.dropout,
+        class_weights=class_weights,
     )
     
     # Count parameters

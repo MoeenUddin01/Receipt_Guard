@@ -191,7 +191,7 @@ def normalize_total(total_str: str) -> str:
 
 def assign_bio_labels(box_tokens: List[Dict], entities: Dict) -> List[str]:
     """
-    Assigns BIO (Begin-Inside-Outside) NER labels to each token.
+    Assign BIO labels to tokens based on entity information.
     
     Args:
         box_tokens: List of token dictionaries with 'text' key
@@ -202,38 +202,99 @@ def assign_bio_labels(box_tokens: List[Dict], entities: Dict) -> List[str]:
     """
     labels = ['O'] * len(box_tokens)
     
+    # Clean and normalize entity values
+    def clean_entity_value(value):
+        """Remove quotes, punctuation, and normalize entity value."""
+        if not value:
+            return ''
+        # Remove quotes and trailing commas
+        cleaned = value.strip().strip('"\'').strip(',').strip()
+        # Normalize whitespace
+        cleaned = ' '.join(cleaned.split())
+        return cleaned.lower()
+    
     # Entity types and their corresponding values
+    # Handle both quoted and unquoted keys
     entity_types = {
-        'COMPANY': entities.get('company', ''),
-        'DATE': entities.get('date', ''),
-        'ADDRESS': entities.get('address', ''),
-        'TOTAL': entities.get('total', '')
+        'COMPANY': clean_entity_value(entities.get('company', '') or entities.get('"company"', '')),
+        'DATE': clean_entity_value(entities.get('date', '') or entities.get('"date"', '')),
+        'ADDRESS': clean_entity_value(entities.get('address', '') or entities.get('"address"', '')),
+        'TOTAL': clean_entity_value(entities.get('total', '') or entities.get('"total"', ''))
     }
     
+    # Track assigned tokens to avoid multiple assignments
+    assigned_tokens = set()
+    
     for token_idx, token in enumerate(box_tokens):
+        if token_idx in assigned_tokens:
+            continue
+            
         token_text = token['text'].lower().strip()
         
         # Check each entity type
         for entity_type, entity_value in entity_types.items():
             if not entity_value:
                 continue
-                
-            entity_value_lower = entity_value.lower()
             
-            # Check if token is part of this entity
-            if token_text in entity_value_lower:
-                # Find position of token in entity value
-                start_pos = entity_value_lower.find(token_text)
+            # Try multiple matching strategies
+            matched = False
+            
+            # Strategy 1: Exact substring match
+            if token_text in entity_value:
+                start_pos = entity_value.find(token_text)
                 if start_pos != -1:
                     # Check if this is the beginning of the entity
                     is_beginning = (start_pos == 0 or 
-                                  entity_value_lower[start_pos-1] in ' \t\n\r')
+                                  entity_value[start_pos-1] in ' \t\n\r')
                     
                     if is_beginning:
                         labels[token_idx] = f'B-{entity_type}'
+                        assigned_tokens.add(token_idx)
+                        matched = True
+                        break
                     else:
                         labels[token_idx] = f'I-{entity_type}'
-                    break
+                        assigned_tokens.add(token_idx)
+                        matched = True
+                        break
+            
+            # Strategy 2: Word-level matching for multi-word entities
+            if not matched:
+                entity_words = entity_value.split()
+                for word_idx, entity_word in enumerate(entity_words):
+                    if token_text == entity_word:
+                        if word_idx == 0:
+                            labels[token_idx] = f'B-{entity_type}'
+                        else:
+                            labels[token_idx] = f'I-{entity_type}'
+                        assigned_tokens.add(token_idx)
+                        matched = True
+                        break
+            
+            # Strategy 3: Fuzzy matching for partial matches (remove punctuation)
+            if not matched:
+                # Remove punctuation from both strings for comparison
+                token_clean = ''.join(c for c in token_text if c.isalnum() or c.isspace())
+                entity_clean = ''.join(c for c in entity_value if c.isalnum() or c.isspace())
+                
+                if token_clean in entity_clean:
+                    # Find position in cleaned entity
+                    start_pos = entity_clean.find(token_clean)
+                    if start_pos != -1:
+                        # Approximate beginning check
+                        is_beginning = (start_pos == 0 or 
+                                      entity_clean[start_pos-1] in ' \t\n\r')
+                        
+                        if is_beginning:
+                            labels[token_idx] = f'B-{entity_type}'
+                        else:
+                            labels[token_idx] = f'I-{entity_type}'
+                        assigned_tokens.add(token_idx)
+                        matched = True
+                        break
+            
+            if matched:
+                break
     
     return labels
 
