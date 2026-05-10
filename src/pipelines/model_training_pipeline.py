@@ -317,7 +317,7 @@ def run_training_pipeline(config: Union[TrainingConfig, Any]) -> Dict:
         
         # Collect all labels from training dataset
         all_labels = []
-        for sample in train_dataset:
+        for sample in train_loader.dataset:
             labels = sample["labels"]
             all_labels.extend(labels[labels != -100].tolist())
         
