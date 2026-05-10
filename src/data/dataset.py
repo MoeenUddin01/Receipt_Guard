@@ -204,9 +204,9 @@ class ReceiptDataset(Dataset):
         previous_word_idx = None
         for word_idx in word_ids:
             if word_idx is None:
-                # Special tokens ([CLS], [SEP], [PAD])
+                # Special tokens ([CLS], [SEP], [PAD]) — use -100 so loss ignores them
                 aligned_bboxes.append([0, 0, 0, 0])
-                aligned_labels.append(LABEL2ID['O'])
+                aligned_labels.append(-100)
             elif word_idx != previous_word_idx:
                 # First token of a word
                 aligned_bboxes.append(bboxes[word_idx])

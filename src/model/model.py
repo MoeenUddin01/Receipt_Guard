@@ -101,7 +101,12 @@ class ReceiptFieldExtractor(nn.Module):
         nn.init.zeros_(self.classifier.bias)
         
         self.num_labels = num_labels
-        self.class_weights = class_weights
+        # Register class_weights as a buffer so .to(device) moves it automatically
+        if class_weights is not None:
+            self.register_buffer('class_weights', class_weights)
+            print(f"✅ Class weights registered as buffer: {class_weights}")
+        else:
+            self.class_weights = None
 
     def forward(
         self,
