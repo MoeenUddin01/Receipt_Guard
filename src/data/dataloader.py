@@ -278,6 +278,7 @@ class ReceiptLedger:
                 'date': entity_dict.get('date', '').strip(),
                 'total': entity_dict.get('total', '').strip(),
                 'address': entity_dict.get('address', '').strip(),
+                'box_file_path': entity_dict.get('box_file_path', ''),
                 'first_seen': current_time,
                 'last_seen': current_time,
                 'submission_count': 1

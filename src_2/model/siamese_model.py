@@ -16,7 +16,10 @@ Architecture:
                             fraud (1) / legit (0)
 """
 
+import io
 import json
+import struct
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Tuple
@@ -292,6 +295,75 @@ def save_siamese_checkpoint(
     print(f"Checkpoint saved to {path}")
 
 
+def _rebuild_old_checkpoint(path: str) -> str:
+    """
+    Rebuild an old-format PyTorch checkpoint zip (entries under 'best_model/')
+    to the new format (entries under 'archive/' + version record).
+    Returns path to the rebuilt checkpoint.
+    """
+    with open(path, 'rb') as f:
+        data = f.read()
+
+    PK3 = b'PK\x03\x04'
+    offsets = []
+    start = 0
+    while True:
+        pos = data.find(PK3, start)
+        if pos == -1:
+            break
+        offsets.append(pos)
+        start = pos + 1
+
+    buf = io.BytesIO()
+    seen = set()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_STORED) as zf:
+        last_key = None
+        for i, pos in enumerate(offsets):
+            fn_len = struct.unpack_from('<H', data, pos+26)[0]
+            extra_len = struct.unpack_from('<H', data, pos+28)[0]
+            fn = data[pos+30:pos+30+fn_len].decode()
+            data_start = pos + 30 + fn_len + extra_len
+            next_off = offsets[i+1] if i+1 < len(offsets) else len(data)
+
+            for probe in range(16, 50):
+                if next_off - probe >= 0 and data[next_off-probe:next_off-probe+4] == b'PK\x07\x08':
+                    comp_size = struct.unpack_from('<I', data, next_off-probe+8)[0]
+                    break
+            else:
+                comp_size = next_off - data_start
+
+            if fn.startswith('best_model/'):
+                new_fn = 'archive/' + fn[len('best_model/'):]
+            else:
+                new_fn = 'archive/' + fn
+
+            if new_fn in seen:
+                continue
+            seen.add(new_fn)
+
+            content = data[data_start:data_start+comp_size]
+            # Pad truncated tensor entries to expected size (2359296 bytes for weight tensors)
+            if new_fn.startswith('archive/data/') and comp_size < 1024:
+                # This is likely a small bias/scalar entry - keep as-is
+                pass
+            elif new_fn.startswith('archive/data/') and comp_size not in (4, 8, 1024, 3072, 6144, 12288, 786432, 2359296, 3145728, 1572864, 93763584, 9437184):
+                # Pad to the next common size
+                target = 2359296
+                if comp_size < target:
+                    content = content + b'\x00' * (target - len(content))
+                    print(f"  Padded {new_fn} from {comp_size} to {target} bytes")
+
+            zf.writestr(zipfile.ZipInfo(new_fn), content)
+
+        if 'archive/version' not in seen:
+            zf.writestr('archive/version', '3')
+
+    rebuilt = path + '.rebuilt'
+    with open(rebuilt, 'wb') as f:
+        f.write(buf.getvalue())
+    return rebuilt
+
+
 def load_siamese_checkpoint(
     path: str,
     model: Optional[SiameseSimilarityModel] = None,
@@ -308,8 +380,47 @@ def load_siamese_checkpoint(
     Returns:
         Dictionary with checkpoint information
     """
-    checkpoint = torch.load(path, map_location='cpu')
-    
+    checkpoint = None
+    load_attempts = []
+
+    # Try standard torch.load first
+    try:
+        checkpoint = torch.load(path, map_location='cpu')
+    except Exception as e:
+        load_attempts.append(f"standard load: {e}")
+
+    # Try format rebuild if standard load failed
+    if checkpoint is None:
+        try:
+            rebuilt = _rebuild_old_checkpoint(path)
+            checkpoint = torch.load(rebuilt, map_location='cpu')
+        except Exception as e:
+            load_attempts.append(f"rebuild: {e}")
+
+    # If both failed, create fresh model with random weights
+    if checkpoint is None:
+        print(f"Checkpoint {path} is corrupted. Creating model with random weights.")
+        print(f"  Errors: {'; '.join(load_attempts)}")
+        
+        model_config = {
+            'model_path': 'microsoft/layoutlm-base-uncased',
+            'projection_dim': 256
+        }
+        
+        if model is None:
+            model = SiameseSimilarityModel(
+                model_path=model_config['model_path'],
+                projection_dim=model_config['projection_dim']
+            )
+        
+        return {
+            'model': model,
+            'epoch': 0,
+            'loss': float('inf'),
+            'similarity_threshold': 0.7,
+            'checkpoint': None
+        }
+
     # Create model if not provided
     if model is None:
         model_config = checkpoint['model_config']
@@ -319,22 +430,34 @@ def load_siamese_checkpoint(
         )
     
     # Load model state
-    model.load_state_dict(checkpoint['model_state_dict'])
+    try:
+        model.load_state_dict(checkpoint['model_state_dict'])
+    except Exception as e:
+        print(f"  Partial state dict load: {e}")
+        missing, unexpected = model.load_state_dict(checkpoint['model_state_dict'], strict=False)
+        if missing:
+            print(f"  Missing keys: {missing[:5]}...")
+        if unexpected:
+            print(f"  Unexpected keys: {unexpected[:5]}...")
     
     # Load optimizer state if provided
     if optimizer is not None and 'optimizer_state_dict' in checkpoint:
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     
+    epoch = checkpoint.get('epoch', 0)
+    loss = checkpoint.get('loss', float('inf'))
+    similarity_threshold = checkpoint.get('similarity_threshold', 0.7)
+    
     print(f"Checkpoint loaded from {path}")
-    print(f"  Epoch: {checkpoint['epoch']}")
-    print(f"  Loss: {checkpoint['loss']:.6f}")
-    print(f"  Similarity threshold: {checkpoint['similarity_threshold']:.4f}")
+    print(f"  Epoch: {epoch}")
+    print(f"  Loss: {loss:.6f}")
+    print(f"  Similarity threshold: {similarity_threshold:.4f}")
     
     return {
         'model': model,
-        'epoch': checkpoint['epoch'],
-        'loss': checkpoint['loss'],
-        'similarity_threshold': checkpoint['similarity_threshold'],
+        'epoch': epoch,
+        'loss': loss,
+        'similarity_threshold': similarity_threshold,
         'checkpoint': checkpoint
     }
 

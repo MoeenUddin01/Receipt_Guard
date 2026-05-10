@@ -7,7 +7,7 @@ import torch
 from torch.utils.data import Dataset
 from transformers import AutoTokenizer
 
-from preprocessing import build_processed_sample
+from src.data.preprocessing import build_processed_sample
 
 # Import configuration
 from src.config import CFG
@@ -70,8 +70,12 @@ class ReceiptDataset(Dataset):
         self.max_length = max_length
         self.cache_dir = Path(cache_dir) if cache_dir else None
         
-        # Initialize tokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+        # Initialize tokenizer - use LayoutLMTokenizer for LayoutLM models
+        try:
+            from transformers import LayoutLMTokenizer
+            self.tokenizer = LayoutLMTokenizer.from_pretrained(tokenizer_name)
+        except ImportError:
+            self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
         
         # Log absolute path for debugging
         logger.info(f"Initializing ReceiptDataset for {split} split")

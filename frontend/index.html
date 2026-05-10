@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ReceiptGuard - Fraud Detection</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+            margin: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            color: #333;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+        
+        .header p {
+            color: #666;
+            font-size: 1.1rem;
+        }
+        
+        .upload-section {
+            margin-bottom: 30px;
+        }
+        
+        .upload-area {
+            border: 3px dashed #ddd;
+            border-radius: 15px;
+            padding: 40px;
+            text-align: center;
+            background: #fafafa;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .upload-area:hover {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+        
+        .upload-area.dragover {
+            border-color: #667eea;
+            background: #e8f4ff;
+        }
+        
+        .upload-icon {
+            font-size: 3rem;
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+        
+        .upload-text {
+            color: #666;
+            font-size: 1.1rem;
+            margin-bottom: 20px;
+        }
+        
+        .file-input {
+            display: none;
+        }
+        
+        .upload-button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+        
+        .upload-button:hover {
+            background: #5a67d8;
+        }
+        
+        .upload-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .results-section {
+            display: none;
+            margin-top: 30px;
+        }
+        
+        .uploaded-images {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .uploaded-image {
+            text-align: center;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            padding: 10px;
+            background: #f9f9f9;
+        }
+        
+        .uploaded-image img {
+            max-width: 100%;
+            max-height: 120px;
+            border-radius: 4px;
+        }
+        
+        .image-label {
+            font-size: 0.8rem;
+            color: #666;
+            margin-top: 5px;
+        }
+        
+        .clear-uploads {
+            grid-column: 1 / -1;
+            text-align: center;
+        }
+        
+        .clear-button {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+        
+        .clear-button:hover {
+            background: #c82333;
+        }
+        
+        .results-card {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+            border-left: 5px solid #ddd;
+        }
+        
+        .verdict-fraud {
+            border-left-color: #e74c3c;
+        }
+        
+        .verdict-suspicious {
+            border-left-color: #f39c12;
+        }
+        
+        .verdict-legitimate {
+            border-left-color: #27ae60;
+        }
+        
+        .verdict-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .verdict-icon {
+            font-size: 2rem;
+            margin-right: 15px;
+        }
+        
+        .verdict-text {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+        
+        .verdict-fraud .verdict-text {
+            color: #e74c3c;
+        }
+        
+        .verdict-suspicious .verdict-text {
+            color: #f39c12;
+        }
+        
+        .verdict-legitimate .verdict-text {
+            color: #27ae60;
+        }
+        
+        .confidence-bar {
+            background: #ecf0f1;
+            border-radius: 10px;
+            height: 20px;
+            overflow: hidden;
+            margin: 15px 0;
+        }
+        
+        .confidence-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            transition: width 0.5s ease;
+        }
+        
+        .confidence-text {
+            text-align: center;
+            margin-top: 10px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .extracted-info {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .info-item {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        
+        .info-label {
+            font-size: 0.9rem;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        
+        .info-value {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error-message {
+            background: #fee;
+            color: #c0392b;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .batch-section {
+            margin-top: 30px;
+            text-align: center;
+        }
+        
+        .batch-button {
+            background: #764ba2;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+        
+        .batch-button:hover {
+            background: #5a67d8;
+        }
+        
+        .batch-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🛡️ ReceiptGuard</h1>
+            <p>Advanced AI-powered fraud detection for receipts</p>
+            <div style="margin-top: 20px;">
+                <label style="display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 0.9rem;">
+                    <input type="checkbox" id="demoMode" checked>
+                    <span>🎭 Demo Mode (Fast)</span>
+                    <span style="color: #666;">|</span>
+                    <span>🔗 Real API (Slow)</span>
+                </label>
+            </div>
+        </div>
+        
+        <div class="upload-section">
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">📸</div>
+                <div class="upload-text">
+                    <strong>Drop receipt image here</strong><br>
+                    <small>or click to browse</small>
+                </div>
+                <input type="file" id="fileInput" class="file-input" accept="image/*" multiple>
+                <button class="upload-button" id="uploadButton">Choose Files</button>
+            </div>
+        </div>
+        
+        <div class="uploaded-images" id="uploadedImages"></div>
+        
+        <div class="clear-uploads" id="clearUploadsSection" style="display: none;">
+            <button class="clear-button" id="clearButton">🗑️ Clear All</button>
+        </div>
+        
+        <div class="loading" id="loadingSection" style="display: none;">
+            <div class="spinner"></div>
+            <p>Analyzing receipt...</p>
+        </div>
+        
+        <div class="results-section" id="resultsSection">
+            <!-- Results will be populated here -->
+        </div>
+        
+        <div class="batch-section">
+            <button class="batch-button" id="batchButton" style="display: none;">
+                📊 Analyze All Results
+            </button>
+        </div>
+    </div>
+    
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        let selectedFiles = [];
+        let allResults = [];
+        
+        // DOM elements
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const uploadButton = document.getElementById('uploadButton');
+        const loadingSection = document.getElementById('loadingSection');
+        const resultsSection = document.getElementById('resultsSection');
+        const batchButton = document.getElementById('batchButton');
+        const uploadedImages = document.getElementById('uploadedImages');
+        const clearButton = document.getElementById('clearButton');
+        const demoMode = document.getElementById('demoMode');
+        
+        // File upload handlers
+        uploadButton.addEventListener('click', () => fileInput.click());
+        
+        fileInput.addEventListener('change', (e) => {
+            selectedFiles = Array.from(e.target.files);
+            processFiles();
+        });
+        
+        // Drag and drop handlers
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            selectedFiles = Array.from(e.dataTransfer.files);
+            processFiles();
+        });
+        
+        async function processFiles() {
+            if (selectedFiles.length === 0) return;
+            
+            showLoading(true);
+            hideResults();
+            
+            // Display uploaded images
+            displayUploadedImages();
+            
+            const results = [];
+            
+            for (let i = 0; i < selectedFiles.length; i++) {
+                const file = selectedFiles[i];
+                try {
+                    const result = await analyzeReceipt(file);
+                    results.push(result);
+                } catch (error) {
+                    console.error(`Error processing ${file.name}:`, error);
+                    results.push({
+                        filename: file.name,
+                        error: error.message
+                    });
+                }
+            }
+            
+            allResults = results;
+            displayResults(results);
+            showLoading(false);
+            
+            if (results.length > 1) {
+                batchButton.style.display = 'block';
+            }
+        }
+        
+        function displayUploadedImages() {
+            uploadedImages.innerHTML = '';
+            document.getElementById('clearUploadsSection').style.display = 'block';
+            
+            selectedFiles.forEach((file, index) => {
+                const imageDiv = document.createElement('div');
+                imageDiv.className = 'uploaded-image';
+                
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    imageDiv.innerHTML = `
+                        <img src="${e.target.result}" alt="${file.name}">
+                        <div class="image-label">${file.name}</div>
+                    `;
+                };
+                reader.readAsDataURL(file);
+                
+                uploadedImages.appendChild(imageDiv);
+            });
+        }
+        
+        async function analyzeReceipt(file) {
+            if (demoMode.checked) {
+                // Demo mode for fast testing - return mock results instantly
+                return new Promise((resolve) => {
+                    setTimeout(() => {
+                        const verdicts = ['FRAUD', 'SUSPICIOUS', 'LEGITIMATE'];
+                        const verdict = verdicts[Math.floor(Math.random() * verdicts.length)];
+                        
+                        resolve({
+                            company: "BOOK TA .K SDN BHD",
+                            date: "25/12/2018",
+                            total: "9.00",
+                            verdict: verdict,
+                            confidence: Math.random() * 0.3 + 0.7, // 0.7-1.0
+                            similarity_score: Math.random() * 0.8 + 0.2, // 0.2-1.0
+                            fingerprint: "abc123...",
+                            is_new_receipt: Math.random() > 0.5,
+                            filename: file.name
+                        });
+                    }, 500); // 0.5 second delay for demo
+                });
+            } else {
+                // Real API mode
+                const formData = new FormData();
+                formData.append('image', file);
+                
+                const response = await fetch(`${API_BASE}/predict`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                return await response.json();
+            }
+        }
+        
+        function displayResults(results) {
+            resultsSection.innerHTML = '';
+            
+            results.forEach((result, index) => {
+                if (result.error) {
+                    displayError(result.error, result.filename);
+                    return;
+                }
+                
+                const resultCard = createResultCard(result, index);
+                resultsSection.appendChild(resultCard);
+            });
+        }
+        
+        function createResultCard(result, index) {
+            const card = document.createElement('div');
+            card.className = `results-card verdict-${result.verdict.toLowerCase()}`;
+            
+            const verdictIcon = getVerdictIcon(result.verdict);
+            const confidencePercent = Math.round(result.confidence * 100);
+            
+            card.innerHTML = `
+                <div class="verdict-header">
+                    <div class="verdict-icon">${verdictIcon}</div>
+                    <div class="verdict-text">${result.verdict}</div>
+                </div>
+                
+                <div class="confidence-bar">
+                    <div class="confidence-fill" style="width: ${confidencePercent}%"></div>
+                </div>
+                <div class="confidence-text">Confidence: ${confidencePercent}%</div>
+                
+                <div class="extracted-info">
+                    <div class="info-item">
+                        <div class="info-label">Company</div>
+                        <div class="info-value">${result.company || 'Not detected'}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Date</div>
+                        <div class="info-value">${result.date || 'Not detected'}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Total</div>
+                        <div class="info-value">${result.total || 'Not detected'}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Similarity</div>
+                        <div class="info-value">${result.similarity_score?.toFixed(3) || 'N/A'}</div>
+                    </div>
+                </div>
+            `;
+            
+            return card;
+        }
+        
+        function getVerdictIcon(verdict) {
+            const icons = {
+                'FRAUD': '🚨',
+                'SUSPICIOUS': '⚠️',
+                'LEGITIMATE': '✅'
+            };
+            return icons[verdict] || '❓';
+        }
+        
+        function displayError(message, filename) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error-message';
+            errorDiv.innerHTML = `
+                <strong>Error processing ${filename}:</strong><br>
+                ${message}
+            `;
+            resultsSection.appendChild(errorDiv);
+        }
+        
+        function showLoading(show) {
+            loadingSection.style.display = show ? 'block' : 'none';
+            uploadButton.disabled = show;
+        }
+        
+        function hideResults() {
+            resultsSection.style.display = 'none';
+            batchButton.style.display = 'none';
+        }
+        
+        // Clear uploads
+        clearButton.addEventListener('click', () => {
+            selectedFiles = [];
+            allResults = [];
+            fileInput.value = '';
+            uploadedImages.innerHTML = '';
+            document.getElementById('clearUploadsSection').style.display = 'none';
+            hideResults();
+            batchButton.style.display = 'none';
+            uploadArea.classList.remove('has-files');
+        });
+        
+        // Batch analysis
+        batchButton.addEventListener('click', async () => {
+            if (allResults.length === 0) return;
+            
+            showLoading(true);
+            
+            try {
+                const formData = new FormData();
+                allResults.forEach((result, index) => {
+                    if (result.filename) {
+                        formData.append('images', result.file);
+                    }
+                });
+                
+                const response = await fetch(`${API_BASE}/predict/batch`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const batchResult = await response.json();
+                displayBatchSummary(batchResult);
+                
+            } catch (error) {
+                console.error('Batch analysis failed:', error);
+                alert('Batch analysis failed. Please try again.');
+            } finally {
+                showLoading(false);
+            }
+        });
+        
+        function displayBatchSummary(batchResult) {
+            const fraudCount = batchResult.fraud_count || 0;
+            const suspiciousCount = batchResult.suspicious_count || 0;
+            const legitimateCount = batchResult.legitimate_count || 0;
+            const total = batchResult.total_processed || 0;
+            
+            const summaryHtml = `
+                <div class="results-card">
+                    <h3>📊 Batch Analysis Summary</h3>
+                    <div class="extracted-info">
+                        <div class="info-item">
+                            <div class="info-label">Total Processed</div>
+                            <div class="info-value">${total}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">🚨 Fraud Detected</div>
+                            <div class="info-value" style="color: #e74c3c;">${fraudCount}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">⚠️ Suspicious</div>
+                            <div class="info-value" style="color: #f39c12;">${suspiciousCount}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">✅ Legitimate</div>
+                            <div class="info-value" style="color: #27ae60;">${legitimateCount}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            resultsSection.innerHTML = summaryHtml;
+            resultsSection.style.display = 'block';
+        }
+        
+        // Check API health on load
+        window.addEventListener('load', async () => {
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                if (response.ok) {
+                    const health = await response.json();
+                    console.log('API Health:', health);
+                    updateModelStatus(health);
+                } else {
+                    throw new Error('API not responding');
+                }
+            } catch (error) {
+                console.error('API Health Check Failed:', error);
+                displayError('Cannot connect to backend API. Please ensure that backend is running on localhost:8000', 'Connection Error');
+                updateModelStatus({ models_loaded: false });
+            }
+        });
+        
+        function updateModelStatus(health) {
+            console.log('Model status:', health.models_loaded ? 'loaded' : 'missing');
+        }
+    </script>
+</body>
+</html>
