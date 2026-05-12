@@ -100,66 +100,58 @@ def build_receipt_fingerprint(entity_dict: Dict) -> str:
     """
     Creates a canonical fingerprint for duplicate detection.
     
-    This function implements the core fraud detection logic by normalizing
-    receipt entities and creating a unique hash. Each normalization step
-    is critical for catching variations in how the same receipt might be
-    submitted multiple times.
+    Uses NER-extracted fields (company, date, total) by default.
+    Falls back to raw OCR text when all fields are empty, so that
+    the 2-database formula still works even with a weak NER model.
     
     Args:
         entity_dict: Dictionary with keys 'company', 'date', 'total', 'address'
+                     and optionally 'raw_ocr_text' for fallback
         
     Returns:
         SHA-256 hash of the normalized receipt fingerprint
     """
-    # Extract entities with fallback to empty strings
     company = entity_dict.get('company', '').strip()
     date = entity_dict.get('date', '').strip()
     total = entity_dict.get('total', '').strip()
-    
+
+    # Fallback: if all NER fields are empty, use raw OCR text as fingerprint
+    if not company and not date and not total:
+        raw_text = entity_dict.get('raw_ocr_text', '').strip()
+        if raw_text:
+            fingerprint_hash = hashlib.sha256(raw_text.encode('utf-8')).hexdigest()
+            logger.debug(f"Fingerprint (OCR fallback): -> {fingerprint_hash}")
+            return fingerprint_hash
+
     # Normalize company name
-    # Fraud detection rationale: Same company might be written with different
-    # capitalization, punctuation, or extra whitespace
-    company_normalized = re.sub(r'[^\w\s]', '', company.lower())  # Remove punctuation, lowercase
-    company_normalized = re.sub(r'\s+', ' ', company_normalized)  # Normalize whitespace
+    company_normalized = re.sub(r'[^\w\s]', '', company.lower())
+    company_normalized = re.sub(r'\s+', ' ', company_normalized)
     company_normalized = company_normalized.strip()
     
     # Normalize date
-    # Fraud detection rationale: Dates might be formatted differently (DD/MM/YYYY,
-    # MM/DD/YYYY, with/without separators) but represent the same date
-    date_digits = re.sub(r'[^\d]', '', date)  # Extract only digits
-    
+    date_digits = re.sub(r'[^\d]', '', date)
     if len(date_digits) == 8:
-        # Assume DDMMYYYY format and sort to standard format
         day = date_digits[:2]
         month = date_digits[2:4]
         year = date_digits[4:8]
         date_normalized = f"{day}{month}{year}"
     elif len(date_digits) == 6:
-        # Assume DDMMYY format
         day = date_digits[:2]
         month = date_digits[2:4]
         year = date_digits[4:6]
-        # Assume 2000s for years < 50, 1900s otherwise
         year = '20' + year if int(year) < 50 else '19' + year
         date_normalized = f"{day}{month}{year}"
     else:
-        # If we can't parse the date, use original digits
         date_normalized = date_digits
     
     # Normalize total amount
-    # Fraud detection rationale: Total might be written with different
-    # currency symbols, separators, or precision but represent the same value
-    total_clean = re.sub(r'[^\d.,]', '', total)  # Remove currency symbols and text
-    
-    # Handle different decimal separators
+    total_clean = re.sub(r'[^\d.,]', '', total)
     if ',' in total_clean and '.' in total_clean:
-        # If both exist, assume the last one is the decimal separator
         if total_clean.rfind(',') > total_clean.rfind('.'):
             total_clean = total_clean.replace('.', '').replace(',', '.')
         else:
             total_clean = total_clean.replace(',', '')
     elif ',' in total_clean:
-        # Check if comma is likely decimal separator (European format)
         parts = total_clean.split(',')
         if len(parts) == 2 and len(parts[1]) <= 2:
             total_clean = total_clean.replace(',', '.')
@@ -168,23 +160,13 @@ def build_receipt_fingerprint(entity_dict: Dict) -> str:
     
     try:
         total_float = float(total_clean)
-        total_normalized = f"{total_float:.2f}"  # Always 2 decimal places
+        total_normalized = f"{total_float:.2f}"
     except ValueError:
-        # If we can't parse the total, use the cleaned string
         total_normalized = total_clean
     
-    # Create the canonical fingerprint string
-    # Fraud detection rationale: The combination of normalized company, date,
-    # and total creates a unique identifier for the same receipt, regardless
-    # of formatting differences or minor OCR errors
     fingerprint_str = f"{company_normalized}|{date_normalized}|{total_normalized}"
-    
-    # Generate SHA-256 hash for the fingerprint
-    # This creates a fixed-length, collision-resistant identifier
     fingerprint_hash = hashlib.sha256(fingerprint_str.encode('utf-8')).hexdigest()
-    
     logger.debug(f"Fingerprint created: {fingerprint_str} -> {fingerprint_hash}")
-    
     return fingerprint_hash
 
 

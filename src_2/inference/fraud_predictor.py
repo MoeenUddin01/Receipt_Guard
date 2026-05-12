@@ -157,10 +157,24 @@ class ReceiptGuardPredictor:
         # Step 1: Extract fields via Model 1
         extracted_fields = self.extract_fields(box_file_path)
 
+        # Step 1b: Read raw OCR text for fallback fingerprinting
+        raw_ocr_text = ""
+        try:
+            with open(box_file_path, "r") as f:
+                box_data = json.load(f)
+            tokens = box_data.get("tokens", [])
+            texts = [t.get("text", "") if isinstance(t, dict) else str(t) for t in tokens]
+            raw_ocr_text = " ".join(texts).strip()
+        except Exception:
+            pass
+
         # Step 2: Register in ledger & check for duplicates
         receipt_id = Path(box_file_path).stem
-        # Include box_file_path so ledger stores it for future Siamese comparisons
-        ledger_entry_fields = {**extracted_fields, "box_file_path": box_file_path}
+        ledger_entry_fields = {
+            **extracted_fields,
+            "box_file_path": box_file_path,
+            "raw_ocr_text": raw_ocr_text,
+        }
         ledger_result = self.ledger.check_and_register(receipt_id, ledger_entry_fields)
         fingerprint = ledger_result["fingerprint"]
         is_new_receipt = not ledger_result["is_duplicate"]
@@ -172,12 +186,26 @@ class ReceiptGuardPredictor:
             if sim is not None:
                 similarity_score = sim
 
-        # Step 4: Apply rule engine for verdict
+        # Step 4: Build reason detail
+        detail = ""
+        if not is_new_receipt:
+            existing = ledger_result.get("existing_record", {})
+            count = existing.get("submission_count", 0) + 1
+            detail = (
+                f"Duplicate receipt detected! "
+                f"This OCR text fingerprint was submitted {count} times "
+                f"(first seen: {existing.get('first_seen', 'unknown')}). "
+                f"Same receipt text presented again = fraud attempt."
+            )
+        else:
+            detail = "New receipt registered in ledger. First time seeing this OCR text."
+
+        # Step 5: Apply rule engine for verdict
         verdict, confidence = self._apply_rule_engine(
             similarity_score, fingerprint, is_new_receipt
         )
 
-        # Step 5: Save ledger
+        # Step 6: Save ledger
         self.ledger.save()
 
         return {
@@ -187,7 +215,9 @@ class ReceiptGuardPredictor:
             "total": extracted_fields.get("total", ""),
             "verdict": verdict,
             "confidence": confidence,
+            "similarity": similarity_score,
             "similarity_score": similarity_score,
+            "detail": detail,
             "fingerprint": fingerprint,
             "is_new_receipt": is_new_receipt,
         }

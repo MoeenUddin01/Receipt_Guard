@@ -10,7 +10,9 @@ from typing import Optional, Tuple
 import sys
 import torch
 import torch.nn as nn
-from torch import Tensor
+import torch.nn.functional as F
+from transformers import LayoutLMModel, LayoutLMTokenizer, LayoutLMConfig
+
 import transformers.models.layoutlm.modeling_layoutlm  # noqa: F401
 from transformers import LayoutLMModel
 
@@ -85,7 +87,29 @@ class ReceiptFieldExtractor(nn.Module):
         # Force the module into sys.modules to avoid KeyError in transformers 4.40+
         import transformers.models.layoutlm.modeling_layoutlm
         sys.modules['transformers.models.layoutlm.modeling_layoutlm'] = transformers.models.layoutlm.modeling_layoutlm
-        self.layoutlm = LayoutLMModel.from_pretrained(model_path)
+
+        # Fix transformers v5.x compatibility: LayoutLM pretrained model files
+        # have a "bert." prefix in state dict keys (e.g. "bert.encoder.layer.0")
+        # but the current LayoutLM class expects keys without it ("encoder.layer.0").
+        # Load config, build model, then manually remap and load pretrained weights.
+        config = LayoutLMConfig.from_pretrained(model_path)
+        self.layoutlm = LayoutLMModel(config)
+        try:
+            import os
+            weights_file = os.path.join(model_path, "pytorch_model.bin")
+            if os.path.exists(weights_file):
+                pretrained_sd = torch.load(weights_file, map_location="cpu", weights_only=True)
+                remapped = {}
+                for k, v in pretrained_sd.items():
+                    if k.startswith("bert."):
+                        remapped[k[5:]] = v
+                    else:
+                        remapped[k] = v
+                self.layoutlm.load_state_dict(remapped, strict=False)
+            else:
+                self.layoutlm = LayoutLMModel.from_pretrained(model_path)
+        except Exception:
+            self.layoutlm = LayoutLMModel.from_pretrained(model_path)
         
         # Get hidden size from config
         self.hidden_size = self.layoutlm.config.hidden_size

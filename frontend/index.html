@@ -176,6 +176,10 @@
         .verdict-legitimate {
             border-left-color: #27ae60;
         }
+
+        .verdict-not_generated_by_us {
+            border-left-color: #95a5a6;
+        }
         
         .verdict-header {
             display: flex;
@@ -203,6 +207,10 @@
         
         .verdict-legitimate .verdict-text {
             color: #27ae60;
+        }
+
+        .verdict-not_generated_by_us .verdict-text {
+            color: #7f8c8d;
         }
         
         .confidence-bar {
@@ -311,13 +319,8 @@
         <div class="header">
             <h1>🛡️ ReceiptGuard</h1>
             <p>Advanced AI-powered fraud detection for receipts</p>
-            <div style="margin-top: 20px;">
-                <label style="display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 0.9rem;">
-                    <input type="checkbox" id="demoMode" checked>
-                    <span>🎭 Demo Mode (Fast)</span>
-                    <span style="color: #666;">|</span>
-                    <span>🔗 Real API (Slow)</span>
-                </label>
+            <div style="margin-top: 10px; font-size: 0.9rem; color: #666;">
+                Two-database fraud detection: 1st upload = Legitimate, 2nd upload = Fraud
             </div>
         </div>
         
@@ -356,7 +359,7 @@
     </div>
     
     <script>
-        const API_BASE = 'http://localhost:8000';
+        const API_BASE = '';
         let selectedFiles = [];
         let allResults = [];
         
@@ -369,7 +372,6 @@
         const batchButton = document.getElementById('batchButton');
         const uploadedImages = document.getElementById('uploadedImages');
         const clearButton = document.getElementById('clearButton');
-        const demoMode = document.getElementById('demoMode');
         
         // File upload handlers
         uploadButton.addEventListener('click', () => fileInput.click());
@@ -452,46 +454,31 @@
         }
         
         async function analyzeReceipt(file) {
-            if (demoMode.checked) {
-                // Demo mode for fast testing - return mock results instantly
-                return new Promise((resolve) => {
-                    setTimeout(() => {
-                        const verdicts = ['FRAUD', 'SUSPICIOUS', 'LEGITIMATE'];
-                        const verdict = verdicts[Math.floor(Math.random() * verdicts.length)];
-                        
-                        resolve({
-                            company: "BOOK TA .K SDN BHD",
-                            date: "25/12/2018",
-                            total: "9.00",
-                            verdict: verdict,
-                            confidence: Math.random() * 0.3 + 0.7, // 0.7-1.0
-                            similarity_score: Math.random() * 0.8 + 0.2, // 0.2-1.0
-                            fingerprint: "abc123...",
-                            is_new_receipt: Math.random() > 0.5,
-                            filename: file.name
-                        });
-                    }, 500); // 0.5 second delay for demo
-                });
-            } else {
-                // Real API mode
-                const formData = new FormData();
-                formData.append('image', file);
-                
-                const response = await fetch(`${API_BASE}/predict`, {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-                
-                return await response.json();
+            const formData = new FormData();
+            formData.append('image', file);
+
+            const response = await fetch(`${API_BASE}/predict`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
+
+            const data = await response.json();
+            return {
+                filename: data.filename || file.name,
+                verdict: data.verdict,
+                confidence: data.confidence || 0,
+                detail: data.detail || '',
+                similarity: data.similarity || 0,
+            };
         }
         
         function displayResults(results) {
             resultsSection.innerHTML = '';
+            resultsSection.style.display = 'block';
             
             results.forEach((result, index) => {
                 if (result.error) {
@@ -505,16 +492,19 @@
         }
         
         function createResultCard(result, index) {
+            const verdictKey = result.verdict.toLowerCase().replace(/\s+/g, '_');
             const card = document.createElement('div');
-            card.className = `results-card verdict-${result.verdict.toLowerCase()}`;
+            card.className = `results-card verdict-${verdictKey}`;
             
             const verdictIcon = getVerdictIcon(result.verdict);
             const confidencePercent = Math.round(result.confidence * 100);
             
+            const detailHtml = result.detail ? `<p style="margin: 10px 0; color: #666; font-size: 0.9rem;">${result.detail}</p>` : '';
+            
             card.innerHTML = `
                 <div class="verdict-header">
                     <div class="verdict-icon">${verdictIcon}</div>
-                    <div class="verdict-text">${result.verdict}</div>
+                    <div class="verdict-text">${result.verdict.replace(/_/g, ' ')}</div>
                 </div>
                 
                 <div class="confidence-bar">
@@ -522,22 +512,16 @@
                 </div>
                 <div class="confidence-text">Confidence: ${confidencePercent}%</div>
                 
+                ${detailHtml}
+                
                 <div class="extracted-info">
                     <div class="info-item">
-                        <div class="info-label">Company</div>
-                        <div class="info-value">${result.company || 'Not detected'}</div>
-                    </div>
-                    <div class="info-item">
-                        <div class="info-label">Date</div>
-                        <div class="info-value">${result.date || 'Not detected'}</div>
-                    </div>
-                    <div class="info-item">
-                        <div class="info-label">Total</div>
-                        <div class="info-value">${result.total || 'Not detected'}</div>
+                        <div class="info-label">Filename</div>
+                        <div class="info-value">${result.filename || 'Unknown'}</div>
                     </div>
                     <div class="info-item">
                         <div class="info-label">Similarity</div>
-                        <div class="info-value">${result.similarity_score?.toFixed(3) || 'N/A'}</div>
+                        <div class="info-value">${(result.similarity || 0).toFixed(3)}</div>
                     </div>
                 </div>
             `;
@@ -548,8 +532,8 @@
         function getVerdictIcon(verdict) {
             const icons = {
                 'FRAUD': '🚨',
-                'SUSPICIOUS': '⚠️',
-                'LEGITIMATE': '✅'
+                'LEGITIMATE': '✅',
+                'NOT_GENERATED_BY_US': '❓'
             };
             return icons[verdict] || '❓';
         }
