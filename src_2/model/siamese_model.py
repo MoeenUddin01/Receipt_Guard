@@ -385,7 +385,7 @@ def load_siamese_checkpoint(
 
     # Try standard torch.load first
     try:
-        checkpoint = torch.load(path, map_location='cpu')
+        checkpoint = torch.load(path, map_location='cpu', weights_only=False)
     except Exception as e:
         load_attempts.append(f"standard load: {e}")
 
@@ -393,7 +393,7 @@ def load_siamese_checkpoint(
     if checkpoint is None:
         try:
             rebuilt = _rebuild_old_checkpoint(path)
-            checkpoint = torch.load(rebuilt, map_location='cpu')
+            checkpoint = torch.load(rebuilt, map_location='cpu', weights_only=False)
         except Exception as e:
             load_attempts.append(f"rebuild: {e}")
 

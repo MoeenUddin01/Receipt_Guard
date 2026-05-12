@@ -20,16 +20,23 @@ The system combines advanced document understanding with fraud detection to prov
 - **BIO Labeling**: Uses Begin-Inside-Outside scheme for multi-token entities
 - **Entity Normalization**: Standardizes dates, amounts, and company names
 
-### Model 2 - Siamese Fraud Detection
+#### Model 2 - Siamese Fraud Detection
 - **Siamese Network**: Compares receipts using shared LayoutLM encoder
 - **Similarity Learning**: Learns cosine similarity between receipt pairs
+- **Seeded Claim System**: Two-database workflow (Known vs. Used) for secure receipt submission
 - **Fraud Types**: Detects exact duplicates, date tampering, total tampering, company typos
 - **Threshold Optimization**: Automatically finds optimal similarity threshold for fraud detection
 - **Per-Type Analysis**: Detailed performance metrics by fraud type
 
+### Fraud Detection Dashboard (UI)
+- **Advanced UI**: Premium glassmorphism design with animated confidence gauges
+- **Real-time Verification**: Instant LEGITIMATE/FRAUD verdict on image upload
+- **Claim Workflow**: Automated transfer from 'Known' to 'Used' database on success
+- **State Management**: Distinct visual feedback for New, Claimed, and Unknown receipts
+
 ### System Features
 - **Receipt Ledger**: Persistent storage of processed receipts with fingerprinting
-- **Rule Engine**: Combines similarity scores with fingerprint matching for verdicts
+- **Rule Engine**: "Best Match" logic comparing Known vs. Used scores to eliminate false positives
 - **Dual-Model Pipeline**: End-to-end processing from image to fraud verdict
 - **Comprehensive Evaluation**: ROC curves, confusion matrices, per-type metrics
 - **Mixed Precision Training**: Faster training with automatic mixed precision
@@ -38,11 +45,10 @@ The system combines advanced document understanding with fraud detection to prov
 ### Infrastructure
 - **SROIE2019 Dataset**: Built on benchmark receipt OCR dataset
 - **Centralized Configuration**: YAML-based configuration system with CLI override support
+- **Seeding Utility**: Automatic database population from test datasets
 - **CLI Interface**: Complete command-line interface for both models
 - **Kaggle Support**: Runtime configuration overrides for notebook environments
 - **Robust Preprocessing**: Data pipeline with bbox normalization and synthetic fraud generation
-- **PyTorch Datasets**: Ready-to-use datasets for both models
-- **Error Handling**: Graceful handling of malformed data and missing files
 
 ## Current Implementation Status
 
@@ -58,6 +64,7 @@ The system combines advanced document understanding with fraud detection to prov
   - Subcommands: preprocess, train, evaluate, full
   - Argument validation and help documentation
   - Error handling and progress reporting
+  - CLI "Verdict Box" for instant visual results
 
 - **Data Layer**
   - Data preprocessing pipeline (`src/data/preprocessing.py`)
@@ -87,7 +94,7 @@ The system combines advanced document understanding with fraud detection to prov
   - Batch inference support
   - Duplicate detection integration
 
-✅ **Model 2 - Siamese Fraud Detection:**
+✅ **Model 2 - Siamese Fraud Detection & Dashboard:**
 - **Data Layer (`src_2/data/`)**
   - Fraud dataset generation (`fraud_dataset.py`) with synthetic tampering
   - Siamese dataloaders (`dataloader.py`) with custom collate functions
@@ -105,13 +112,20 @@ The system combines advanced document understanding with fraud detection to prov
   - Evaluation pipeline (`siamese_eval_pipeline.py`) for trained models
 
 - **Inference Layer (`src_2/inference/`)**
+  - Image Fraud Detector (`image_fraud_detector.py`) with Seeded Claim logic
+  - Dual-database search (Known vs. Used) with "Best Match" resolution
+  - Seeding utility (`seed_database.py`) for automated DB population
   - Combined fraud predictor (`fraud_predictor.py`) using both models + ledger
-  - Rule engine for verdict determination (FRAUD/SUSPICIOUS/LEGITIMATE)
-  - Receipt ledger integration for persistent fingerprinting
+
+- **Frontend & API (`backend/`, `frontend/`)**
+  - FastAPI Backend (`image_fraud_api.py`) serving model and static UI
+  - Premium Fraud Dashboard (`image_fraud_ui.html`) with glassmorphism design
+  - Real-time websocket-ready REST endpoints for fraud verification
 
 - **Testing (`src_2/tests/`)**
   - Comprehensive unit tests (`test_siamese.py`) for all components
   - Self-contained tests with mocking, no dataset dependencies
+ies
 
 ## Installation
 
@@ -195,7 +209,23 @@ python -m src_2.inference.fraud_predictor \
   --image receipt.jpg \
   --model1 artifacts/checkpoints/best_model.pt \
   --model2 artifacts/siamese/checkpoints/best_model.pth
+
+### Fraud Detection Dashboard (UI)
+
+The system includes a premium web dashboard for real-time fraud detection and receipt claiming.
+
+#### 1. Seed the Database
+Populate the 'Known' database with valid receipts from the test set:
+```bash
+python src_2/inference/seed_database.py --limit 50
 ```
+
+#### 2. Launch the Dashboard
+Start the FastAPI backend which serves the UI:
+```bash
+python backend/image_fraud_api.py
+```
+Access the dashboard at: **http://localhost:8001/static/image_fraud_ui.html**
 
 ### Combined Inference
 

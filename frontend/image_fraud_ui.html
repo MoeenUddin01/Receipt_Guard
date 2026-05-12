@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ReceiptGuard | Advanced Fraud Shield</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --bg-glass: rgba(255, 255, 255, 0.03);
+            --border-glass: rgba(255, 255, 255, 0.1);
+            --accent-emerald: #10b981;
+            --accent-crimson: #ef4444;
+            --accent-blue: #3b82f6;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: radial-gradient(circle at top right, #1e1b4b, #0f172a);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow-x: hidden;
+        }
+
+        .navbar {
+            width: 100%;
+            padding: 2rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border-glass);
+            margin-bottom: 2rem;
+        }
+
+        .logo {
+            font-size: 1.8rem;
+            font-weight: 700;
+            letter-spacing: -1px;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .logo span {
+            background: linear-gradient(to right, #60a5fa, #a855f7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .container {
+            max-width: 800px;
+            width: 95%;
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+            padding-bottom: 4rem;
+        }
+
+        .card {
+            background: var(--bg-glass);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--border-glass);
+            border-radius: 24px;
+            padding: 2.5rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            transition: transform 0.3s ease, border-color 0.3s ease;
+        }
+
+        .hero {
+            text-align: center;
+            margin-bottom: 1rem;
+        }
+
+        .hero h1 {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            font-weight: 700;
+        }
+
+        .hero p {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+        }
+
+        .upload-zone {
+            border: 2px dashed var(--border-glass);
+            border-radius: 20px;
+            padding: 4rem 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .upload-zone:hover {
+            border-color: var(--accent-blue);
+            background: rgba(59, 130, 246, 0.05);
+            transform: translateY(-2px);
+        }
+
+        .upload-zone.dragover {
+            border-color: var(--accent-blue);
+            background: rgba(59, 130, 246, 0.1);
+            scale: 1.02;
+        }
+
+        .upload-icon {
+            font-size: 3.5rem;
+            margin-bottom: 1.5rem;
+            filter: drop-shadow(0 0 15px rgba(59, 130, 246, 0.3));
+        }
+
+        .upload-zone h3 {
+            font-size: 1.4rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .upload-zone p {
+            color: var(--text-secondary);
+        }
+
+        #file-input {
+            display: none;
+        }
+
+        .preview-container {
+            display: none;
+            margin-top: 2rem;
+            position: relative;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--border-glass);
+        }
+
+        #preview-img {
+            width: 100%;
+            height: auto;
+            max-height: 400px;
+            object-fit: contain;
+            display: block;
+        }
+
+        .scan-line {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: var(--accent-blue);
+            box-shadow: 0 0 15px var(--accent-blue);
+            animation: scan 2s linear infinite;
+            display: none;
+        }
+
+        @keyframes scan {
+            0% { top: 0; }
+            100% { top: 100%; }
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+            margin-top: 1.5rem;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: scale(1.02);
+            box-shadow: 0 0 20px rgba(37, 99, 235, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .results {
+            display: none;
+            animation: slideUp 0.5s ease-out;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .verdict-banner {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            padding: 1.5rem;
+            border-radius: 16px;
+            margin-bottom: 2rem;
+        }
+
+        .verdict-banner.legitimate {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+
+        .verdict-banner.fraud {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        .verdict-icon-status {
+            font-size: 2.5rem;
+        }
+
+        .verdict-title {
+            font-size: 1.8rem;
+            font-weight: 700;
+        }
+
+        .legitimate .verdict-title { color: var(--accent-emerald); }
+        .fraud .verdict-title { color: var(--accent-crimson); }
+
+        .verdict-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.5rem;
+        }
+
+        .info-box {
+            background: rgba(255, 255, 255, 0.02);
+            padding: 1.5rem;
+            border-radius: 16px;
+            border: 1px solid var(--border-glass);
+        }
+
+        .info-label {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .info-value {
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        .confidence-circle {
+            position: relative;
+            width: 120px;
+            height: 120px;
+            margin: 0 auto 1rem;
+        }
+
+        .confidence-svg {
+            transform: rotate(-90deg);
+        }
+
+        .circle-bg {
+            fill: none;
+            stroke: var(--border-glass);
+            stroke-width: 8;
+        }
+
+        .circle-fill {
+            fill: none;
+            stroke: var(--accent-blue);
+            stroke-width: 8;
+            stroke-linecap: round;
+            stroke-dasharray: 283;
+            stroke-dashoffset: 283;
+            transition: stroke-dashoffset 1s ease-out;
+        }
+
+        .confidence-number {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .status-msg {
+            text-align: center;
+            margin-top: 1rem;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        /* Loading Spinner */
+        .loader {
+            width: 48px;
+            height: 48px;
+            border: 5px solid #FFF;
+            border-bottom-color: var(--accent-blue);
+            border-radius: 50%;
+            display: inline-block;
+            box-sizing: border-box;
+            animation: rotation 1s linear infinite;
+            display: none;
+            margin-bottom: 1rem;
+        }
+
+        @keyframes rotation {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loading-container {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 3rem;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="logo">🛡️ <span>ReceiptGuard</span></div>
+    </nav>
+
+    <div class="container">
+        <div class="hero">
+            <h1>Advanced Fraud Shield</h1>
+            <p>Standalone image-based verification powered by Siamese LayoutLM</p>
+        </div>
+
+        <div class="card" id="main-card">
+            <div class="upload-zone" id="drop-zone">
+                <input type="file" id="file-input" accept="image/*">
+                <div class="upload-icon">📁</div>
+                <h3>Drop your receipt here</h3>
+                <p>or click to browse from files</p>
+                
+                <div class="preview-container" id="preview-container">
+                    <img id="preview-img" src="" alt="Preview">
+                    <div class="scan-line" id="scan-line"></div>
+                </div>
+            </div>
+
+            <button class="btn" id="analyze-btn" disabled>Verify Receipt</button>
+            <p class="status-msg" id="status-msg">Waiting for upload...</p>
+        </div>
+
+        <div class="loading-container" id="loading-container">
+            <span class="loader"></span>
+            <p>Analyzing spatial features...</p>
+        </div>
+
+        <div class="results" id="results">
+            <div class="card">
+                <div class="verdict-banner" id="verdict-banner">
+                    <div class="verdict-icon-status" id="verdict-icon">✅</div>
+                    <div>
+                        <div class="verdict-title" id="verdict-text">LEGITIMATE</div>
+                        <p id="verdict-msg" style="color: var(--text-secondary)"></p>
+                    </div>
+                </div>
+
+                <div class="verdict-grid">
+                    <div class="info-box" style="text-align: center;">
+                        <div class="info-label">Confidence</div>
+                        <div class="confidence-circle">
+                            <svg class="confidence-svg" width="100" height="100" viewBox="0 0 100 100">
+                                <circle class="circle-bg" cx="50" cy="50" r="45"></circle>
+                                <circle class="circle-fill" id="circle-fill" cx="50" cy="50" r="45"></circle>
+                            </svg>
+                            <div class="confidence-number" id="confidence-number">0%</div>
+                        </div>
+                    </div>
+                    <div class="info-box">
+                        <div class="info-label">Receipt ID</div>
+                        <div class="info-value" id="res-id" style="font-family: monospace; font-size: 0.9rem; word-break: break-all;">-</div>
+                        <br>
+                        <div class="info-label">First Detected</div>
+                        <div class="info-value" id="res-date">-</div>
+                    </div>
+                </div>
+
+                <button class="btn" onclick="resetUI()" style="margin-top: 2rem; background: var(--bg-glass);">Verify Another</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const previewContainer = document.getElementById('preview-container');
+        const previewImg = document.getElementById('preview-img');
+        const analyzeBtn = document.getElementById('analyze-btn');
+        const scanLine = document.getElementById('scan-line');
+        const resultsDiv = document.getElementById('results');
+        const loadingContainer = document.getElementById('loading-container');
+        const mainCard = document.getElementById('main-card');
+
+        // State
+        let selectedFile = null;
+
+        // Click to upload
+        dropZone.onclick = () => fileInput.click();
+
+        // Handle file selection
+        fileInput.onchange = (e) => {
+            handleFiles(e.target.files);
+        };
+
+        // Drag and drop
+        dropZone.ondragover = (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        };
+
+        dropZone.ondragleave = () => {
+            dropZone.classList.remove('dragover');
+        };
+
+        dropZone.ondrop = (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            handleFiles(e.dataTransfer.files);
+        };
+
+        function handleFiles(files) {
+            if (files.length === 0) return;
+            selectedFile = files[0];
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                previewImg.src = e.target.result;
+                previewContainer.style.display = 'block';
+                analyzeBtn.disabled = false;
+                document.getElementById('status-msg').innerText = 'Ready to verify';
+            };
+            reader.readAsDataURL(selectedFile);
+        }
+
+        analyzeBtn.onclick = async () => {
+            if (!selectedFile) return;
+
+            // UI Transitions
+            mainCard.style.opacity = '0.5';
+            mainCard.style.pointerEvents = 'none';
+            loadingContainer.style.display = 'flex';
+            scanLine.style.display = 'block';
+            resultsDiv.style.display = 'none';
+
+            const formData = new FormData();
+            formData.append('image', selectedFile);
+
+            try {
+                const response = await fetch('http://localhost:8001/check', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error('API Error');
+
+                const data = await response.json();
+                showResults(data);
+            } catch (err) {
+                console.error(err);
+                alert('Verification failed. Is the backend running?');
+                resetUI();
+            }
+        };
+
+        function showResults(data) {
+            mainCard.style.display = 'none';
+            loadingContainer.style.display = 'none';
+            resultsDiv.style.display = 'block';
+
+            const banner = document.getElementById('verdict-banner');
+            const icon = document.getElementById('verdict-icon');
+            const text = document.getElementById('verdict-text');
+            const msg = document.getElementById('verdict-msg');
+            const resId = document.getElementById('res-id');
+            const resDate = document.getElementById('res-date');
+            const confNum = document.getElementById('confidence-number');
+            const circleFill = document.getElementById('circle-fill');
+
+            const isFraud = data.verdict === 'FRAUD';
+            
+            banner.className = `verdict-banner ${isFraud ? 'fraud' : 'legitimate'}`;
+            icon.innerText = isFraud ? '🚨' : '✅';
+            text.innerText = data.verdict;
+            msg.innerText = data.message;
+            resId.innerText = data.matched_receipt || data.receipt_id;
+            
+            const rawDate = data.matched_at || new Date().toISOString();
+            resDate.innerText = rawDate.split('T')[0];
+
+            // Animate confidence
+            const conf = data.confidence * 100;
+            confNum.innerText = `${Math.round(conf)}%`;
+            
+            // Circle math: circumference = 2 * PI * r (45) = 283
+            const offset = 283 - (283 * data.confidence);
+            circleFill.style.strokeDashoffset = offset;
+            circleFill.style.stroke = isFraud ? 'var(--accent-crimson)' : 'var(--accent-emerald)';
+        }
+
+        function resetUI() {
+            mainCard.style.display = 'block';
+            mainCard.style.opacity = '1';
+            mainCard.style.pointerEvents = 'auto';
+            resultsDiv.style.display = 'none';
+            previewContainer.style.display = 'none';
+            analyzeBtn.disabled = true;
+            scanLine.style.display = 'none';
+            selectedFile = null;
+            fileInput.value = '';
+            document.getElementById('status-msg').innerText = 'Waiting for upload...';
+        }
+    </script>
+</body>
+</html>
